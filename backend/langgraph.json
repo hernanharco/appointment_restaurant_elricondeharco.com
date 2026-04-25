@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {    
+    "mariamaster": "app.agents.routing.graph:graph" 
+  },
+  "env": ".env"
+}

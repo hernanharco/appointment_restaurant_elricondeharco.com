@@ -1,0 +1,142 @@
+import logging
+from langgraph.graph import StateGraph, START, END
+
+from app.agents.routing.state import RoutingState
+
+from app.agents.nodes.customer_lookup_node import customer_lookup_node
+from app.agents.nodes.router_node import router_node
+from app.agents.nodes.greeting_node import greeting_node
+from app.agents.nodes.booking_node import booking_node
+from app.agents.nodes.confirmation_node import confirmation_node
+from app.agents.nodes.finish_node import finish_node
+from app.agents.nodes.farewell_node import farewell_node
+from app.agents.nodes.modification_request_node import modification_request_node
+from app.agents.nodes.time_parser_node import time_parser_node
+
+# Nodos de restaurante
+from app.agents.nodes.restaurant_router_node import restaurant_router_node
+from app.agents.nodes.restaurant_booking_node import restaurant_booking_node
+from app.agents.nodes.time_filter_node import time_filter_node
+
+# from langgraph.checkpoint.memory import MemorySaver #local
+
+logger = logging.getLogger(__name__)
+
+workflow = StateGraph(RoutingState)
+
+# ── Nodos ─────────────────────────────────────────────────────────────────────
+
+workflow.add_node("customer_lookup", customer_lookup_node)
+workflow.add_node("router", router_node)
+workflow.add_node("greeting", greeting_node)
+workflow.add_node("booking", booking_node)
+workflow.add_node("confirmation", confirmation_node)
+workflow.add_node("finish", finish_node)
+workflow.add_node("farewell", farewell_node)
+workflow.add_node("modification_request", modification_request_node)
+workflow.add_node("time_parser", time_parser_node)
+workflow.add_node("time_filter", time_filter_node)
+workflow.add_node("restaurant_router", restaurant_router_node)
+workflow.add_node("restaurant_booking", restaurant_booking_node)
+
+
+# ── Helpers de routing ────────────────────────────────────────────────────────
+
+
+def _intent(state: RoutingState) -> str:
+    return state.get("intent").value if state.get("intent") else "FINISH"
+
+
+def greeting_next_step(state: RoutingState) -> str:
+    if state.get("force_greeting"):
+        return "BOOKING"
+    current_name = state.get("client_name")
+    if (
+        not current_name
+        or current_name == "Nuevo Cliente"
+        or state.get("wait_for_name")
+    ):
+        return "WAIT"
+    return "BOOKING"
+
+
+# ── Edges ─────────────────────────────────────────────────────────────────────
+
+workflow.add_edge(START, "customer_lookup")
+workflow.add_edge("customer_lookup", "router")
+
+workflow.add_conditional_edges(
+    "router",
+    _intent,
+    {
+        "GREETING": "greeting",
+        "BOOKING": "booking",
+        "CONFIRMATION": "confirmation",
+        "TIME_FILTER": "time_filter",
+        "TIME_PARSER": "time_parser",
+        "FAREWELL": "farewell",
+        "MODIFICATION_REQUEST": "modification_request",
+        "FINISH": END,
+    },
+)
+
+workflow.add_conditional_edges(
+    "greeting",
+    greeting_next_step,
+    {
+        "WAIT": END,
+        "BOOKING": "booking",
+    },
+)
+
+
+workflow.add_conditional_edges(
+    "booking",
+    _intent,
+    {
+        "CONFIRMATION": END,
+        "FINISH": END,
+    },
+)
+
+
+workflow.add_conditional_edges(
+    "confirmation",
+    _intent,
+    {
+        "BOOKING": "booking",
+        "TIME_FILTER": "time_filter",
+        "CONFIRMATION": END,
+        "FINISH": "finish",
+    },
+)
+
+workflow.add_edge("finish", END)
+workflow.add_edge("farewell", END)
+workflow.add_edge("modification_request", END)  # ← NUEVO
+
+workflow.add_conditional_edges(
+    "time_filter",
+    _intent,
+    {
+        "BOOKING": "booking",
+        "CONFIRMATION": END,
+    },
+)
+
+workflow.add_conditional_edges(
+    "time_parser",
+    _intent,
+    {
+        "BOOKING": "booking",
+        "CONFIRMATION": END,
+        "FINISH": END,
+    },
+)
+
+# ── Compilar ──────────────────────────────────────────────────────────────────
+
+# graph = workflow.compile(checkpointer=MemorySaver()) # local
+graph = workflow.compile()  # production
+
+logger.info("Maria Router Graph initialized successfully")

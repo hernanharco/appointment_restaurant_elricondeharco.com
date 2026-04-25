@@ -1,0 +1,15 @@
+---
+// src/components/shared/CollapseControl.astro
+import { ChevronUp } from 'lucide-svelte';
+---
+
+<button 
+  id="toggle-header-btn"
+  type="button" 
+  class="bg-white border border-slate-200 rounded-full p-1.5 shadow-sm hover:bg-slate-50 transition-all hover:scale-110 group pointer-events-auto"
+  title="Plegar/Desplegar menú"
+>
+  <div id="icon-wrapper" class="transition-transform duration-300 pointer-events-none">
+    <ChevronUp size={18} class="text-slate-500 group-hover:text-blue-600" />
+  </div>
+</button>

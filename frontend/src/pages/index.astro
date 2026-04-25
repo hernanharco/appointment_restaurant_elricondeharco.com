@@ -1,0 +1,137 @@
+---
+// src/pages/index.astro
+import Layout from '@/layouts/Layout.astro';
+import AppointmentHeader from '@/components/appointment/AppointmentHeader.astro';
+import Appviewsday from '@/components/appointment/Appviewsday.svelte';
+import DaySchedule from '@/components/appointment/DaySchedule.svelte';
+
+let selectedDate = new Date();
+---
+
+<Layout title="Core Business | Gestión de Reservas">
+  <div class="h-screen flex flex-col bg-slate-50 overflow-hidden">
+    <header
+      id="main-app-header"
+      class="flex-none w-full px-4 pt-4 transition-all duration-500 ease-in-out z-20"
+    >
+      <div
+        id="header-container"
+        class="max-w-10xl mx-auto bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden transition-all duration-500"
+      >
+        <div class="collapsible-section opacity-100 transition-all duration-500 p-5 pb-0">
+          <AppointmentHeader />
+        </div>
+
+        <div id="days-area" class="px-5 py-4 transition-all duration-500">
+          <Appviewsday client:load />
+        </div>
+
+        <button
+          id="toggle-header-btn"
+          class="w-full py-1.5 bg-slate-50 hover:bg-slate-100 border-t border-slate-100 flex justify-center items-center transition-colors group"
+        >
+          <div id="icon-wrapper" class="transition-transform duration-500">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="text-slate-400 group-hover:text-blue-500"
+            >
+              <path d="m18 15-6-6-6 6"></path>
+            </svg>
+          </div>
+        </button>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto w-full custom-scrollbar">
+      <div class="max-w-10xl mx-auto px-4 pt-2">
+        <div id="days-area" class="px-5 py-4 transition-all duration-500">
+          <Appviewsday client:load on:dateSelected={(e) => (selectedDate = e.detail)} />
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-6">
+          <div class="flex-1 min-w-0 w-full">
+            <DaySchedule {selectedDate} client:load />
+          </div>
+        </div>
+      </div>
+      <div class="h-12"></div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+  function initHeaderToggle() {
+    const btn = document.getElementById('toggle-header-btn');
+    const header = document.getElementById('main-app-header');
+    const icon = document.getElementById('icon-wrapper');
+
+    if (btn && header) {
+      btn.onclick = () => {
+        header.classList.toggle('header-compact');
+        icon?.classList.toggle('rotate-180');
+      };
+    }
+  }
+
+  initHeaderToggle();
+  document.addEventListener('astro:after-swap', initHeaderToggle);
+</script>
+
+<style is:global>
+  /* 🪄 LA MAGIA DEL MODO COMPACTO */
+
+  /* 1. Ocultar la parte institucional */
+  .header-compact .collapsible-section {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  /* 2. Reducir el aire del selector de días */
+  .header-compact #days-area {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    /* Aquí podrías añadir un transform: scale(0.95) si quieres que se vea más pequeño */
+  }
+
+  /* 3. Ajuste de sombras para que se vea más integrado al subir */
+  .header-compact #header-container {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+    border-color: #e2e8f0; /* slate-200 */
+  }
+
+  /* 🎨 SCROLLBAR ESTILIZADA */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  :global(body) {
+    overflow: hidden;
+  }
+</style>

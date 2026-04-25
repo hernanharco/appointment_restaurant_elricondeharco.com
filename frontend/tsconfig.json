@@ -1,0 +1,46 @@
+{
+  "extends": "astro/tsconfigs/strictest",
+  "compilerOptions": {
+    // --- CONFIGURACIÓN DE RUTAS ---
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+
+    // --- ENTORNO Y LIBRERÍAS ---
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+    
+    // --- RESOLUCIÓN DE MÓDULOS (CLAVE PARA VITE/SVELTE 5) ---
+    "moduleResolution": "bundler", 
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+
+    // --- SOPORTE PARA JS Y ASTRO ---
+    "jsx": "preserve",
+    "jsxImportSource": "astro",
+    "allowJs": true,
+    "checkJs": true,
+
+    // --- TIPADOS Y SEGURIDAD ---
+    "strict": true,
+    "types": ["astro/client", "vite/client"],
+    "skipLibCheck": true, // Acelera la compilación ignorando errores en node_modules
+    "verbatimModuleSyntax": true // Recomendado para Svelte y Vite moderno
+  },
+  
+  // --- INCLUSIÓN DE ARCHIVOS ---
+  // Aquí le decimos a TS que busque específicamente tus archivos de estado .svelte.ts
+  "include": [
+    "src/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.svelte",
+    "src/**/*.svelte.ts", 
+    "astro.config.mjs"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

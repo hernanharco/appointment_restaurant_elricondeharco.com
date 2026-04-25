@@ -1,0 +1,41 @@
+{
+  "name": "frontend-svelteappointment",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "preview": "vercel dev",
+    "build": "astro build",
+    "astro": "astro",
+    "serve:prod": "pnpm build && pnpm astro preview"
+  },
+  "dependencies": {
+    "@astrojs/svelte": "^7.2.5",
+    "@astrojs/vercel": "^9.0.4",
+    "@tailwindcss/vite": "^4.1.18",
+    "astro": "^5.17.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "embla-carousel-svelte": "^8.6.0",
+    "lucide-svelte": "^0.563.0",
+    "svelte": "^5.50.0",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss": "^4.1.18"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "prettier": "^3.8.1",
+    "prettier-plugin-svelte": "^3.4.1",
+    "serve": "^14.2.5",
+    "vercel": "^50.17.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "vite": "^6.0.0"
+    },
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+---
+// src/components/appointment/AppointmentHeader.astro
+---
+
+<header class="w-full">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-800">Gestión de Reservas</h1>
+      <p class="text-sm text-slate-600 mt-1">Administra las reservas del restaurante</p>
+    </div>
+
+    <div class="flex items-center">
+      <div class="flex items-center gap-3">
+        <button
+          class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+        >
+          <span class="material-symbols-outlined text-sm">add</span>
+          Nueva Reserva
+        </button>
+        <button
+          class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+        >
+          <span class="material-symbols-outlined text-sm">restaurant</span>
+          Configuración
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-6">
+    <div class="text-center">
+      <div class="text-2xl font-bold text-slate-800">12</div>
+      <div class="text-xs text-slate-600 mt-1">Reservas Hoy</div>
+    </div>
+    <div class="text-center">
+      <div class="text-2xl font-bold text-slate-800">48</div>
+      <div class="text-xs text-slate-600 mt-1">Cubiertos Ocupados</div>
+    </div>
+    <div class="text-center">
+      <div class="text-2xl font-bold text-slate-800">85%</div>
+      <div class="text-xs text-slate-600 mt-1">Ocupación</div>
+    </div>
+  </div>
+</header>

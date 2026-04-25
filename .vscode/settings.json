@@ -1,0 +1,8 @@
+{
+  "files.exclude": {
+    "**/__pycache__": true,
+    // "**/__init__.py": true
+  },
+  "python.defaultInterpreterPath": "/home/harco/.cache/pypoetry/virtualenvs/backend-coreappointment-PW6fqyfS-py3.12/bin/python",
+  "python.analysis.typeCheckingMode": "basic"
+}
