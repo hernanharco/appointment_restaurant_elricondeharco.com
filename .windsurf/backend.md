@@ -116,6 +116,61 @@ alembic upgrade head
 poetry run uvicorn app.main:app --reload
 ```
 
+## Restaurant Reservation API
+
+### Reservation System
+El backend incluye un sistema completo de reservas para restaurantes:
+
+#### Key Endpoints
+- **`/api/v1/reservations/`** - CRUD completo de reservas
+- **`/api/v1/availability/`** - Consulta de disponibilidad por fecha y capacidad
+- **`/api/v1/clients/`** - Gestión de clientes del restaurante
+- **`/api/v1/business-hours/`** - Configuración de horarios de operación
+
+#### Data Model
+```python
+# Reservation Model
+class Reservation(Base):
+    client_name: str          # Nombre del cliente
+    party_size: int           # Número de personas (1-20)
+    client_phone: str         # Teléfono opcional
+    client_email: str         # Email opcional
+    client_notes: str         # Notas especiales
+    start_time: datetime      # Inicio de reserva
+    end_time: datetime        # Fin de reserva
+    status: ReservationStatus # scheduled, confirmed, in_progress, completed, cancelled, no_show
+    source: str              # manual, ia, web
+```
+
+#### Status Types
+- **scheduled**: Reserva programada (estado inicial)
+- **confirmed**: Reserva confirmada
+- **in_progress**: Cliente presente en restaurante
+- **completed**: Reserva finalizada
+- **cancelled**: Cancelada por cliente/restaurante
+- **no_show**: Cliente no asistió
+
+#### Availability System
+- **Capacity checking**: Verificación de capacidad por horario
+- **Time slots**: Generación de horarios disponibles (30 min intervals)
+- **Party size validation**: Validación según capacidad del restaurante
+
+#### Business Logic
+- **ReservationService**: Lógica de negocio central
+- **CapacityService**: Gestión de capacidad y disponibilidad
+- **ClientService**: Gestión de clientes y búsqueda por teléfono
+
+### Environment Configuration
+```bash
+# .env.development
+ENVIRONMENT=development
+DATABASE_URL=postgresql://user:pass@localhost/appointment_restaurant
+
+# .env.production  
+ENVIRONMENT=production
+DATABASE_URL=postgresql://user:pass@prod-db/appointment_restaurant
+```
+
 ## Testing
 
 ```bash

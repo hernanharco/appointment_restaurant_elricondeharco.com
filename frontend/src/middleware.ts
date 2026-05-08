@@ -3,7 +3,7 @@
 import { defineMiddleware } from 'astro:middleware';
 import { API_ROUTES } from '@/config/api';
 
-const PUBLIC_ROUTES   = ['/login', '/pending'];
+const PUBLIC_ROUTES = ['/login', '/pending'];
 const PUBLIC_PREFIXES = ['/_astro/', '/assets/', '/fonts/', '/favicon', '/api/auth/'];
 
 const ALLOWED_ROLES = ['SUPERADMIN', 'ADMIN', 'MANAGER'];
@@ -12,10 +12,24 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const { url, cookies, redirect } = context;
   const pathname = new URL(url).pathname;
 
+  // 🔥 DESHABILITAR AUTENTICACIÓN EN DEVELOPMENT
+  const environment = import.meta.env.PUBLIC_ENVIRONMENT || import.meta.env.MODE;
+  if (environment === 'development') {
+    console.log('🚀 Development mode - Authentication disabled');
+    // Simular usuario para development
+    context.locals.user = {
+      id: 1,
+      email: 'dev@example.com',
+      full_name: 'Development User',
+      is_active: true
+    } as any; // Usar any para evitar errores de TypeScript en development
+    return next();
+  }
+
   console.log('🔍 pathname:', pathname);  // 👇
 
   const isPublicPrefix = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
-  const isPublicRoute  = PUBLIC_ROUTES.includes(pathname);
+  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
 
   console.log('isPublicRoute:', isPublicRoute, '| isPublicPrefix:', isPublicPrefix);  // 👇
 
@@ -49,7 +63,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
 
     const user = await response.json();
-    const role   = user.role?.toUpperCase();
+    const role = user.role?.toUpperCase();
     const status = user.status?.toUpperCase();
 
     console.log('role:', role, '| status:', status, '| is_active:', user.is_active);

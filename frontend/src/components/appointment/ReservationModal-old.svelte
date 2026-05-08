@@ -1,25 +1,27 @@
 <script lang="ts">
   import apiCentralized, { type ReservationData } from '@/services/api-centralized.ts';
-  
-  let { 
-    isOpen = $bindable(false), 
-    reservation = $bindable(null), 
-    mode = $bindable('create') // create, edit, view
+
+  let {
+    isOpen = $bindable(false),
+    reservation = $bindable(null),
+    mode = $bindable('create'), // create, edit, view
   } = $props();
-  
-  let formData = $state({
+
+  let dispatch = $state(() => {});
+
+  let formData = {
     client_name: '',
     client_phone: '',
     client_email: '',
     client_notes: '',
     party_size: 2,
     start_time: '',
-    end_time: ''
-  });
-  
-  let isSubmitting = $state(false);
-  let error = $state('');
-  
+    end_time: '',
+  };
+
+  let isSubmitting = false;
+  let error = '';
+
   // Reset form when modal opens
   $effect(() => {
     if (isOpen) {
@@ -31,7 +33,7 @@
           client_notes: reservation.client_notes || '',
           party_size: reservation.party_size || 2,
           start_time: formatDateTimeForInput(reservation.start_time),
-          end_time: formatDateTimeForInput(reservation.end_time)
+          end_time: formatDateTimeForInput(reservation.end_time),
         };
       } else {
         formData = {
@@ -41,7 +43,7 @@
           client_notes: '',
           party_size: 2,
           start_time: '',
-          end_time: ''
+          end_time: '',
         };
       }
       error = '';
@@ -53,96 +55,114 @@
     const date = new Date(dateTimeStr);
     return date.toISOString().slice(0, 16);
   }
-  
-  function calculateEndTime(): void {
+
+  function calculateEndTime() {
     if (formData.start_time) {
       const startTime = new Date(formData.start_time);
       const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); // 2 hours default
       formData.end_time = endTime.toISOString().slice(0, 16);
     }
   }
-  
-  async function handleSubmit(): Promise<void> {
+
+  async function handleSubmit() {
     if (isSubmitting) return;
-    
+
     isSubmitting = true;
     error = '';
-    
+
     try {
-      let result;
-      
-      if (mode === 'create') {
-        result = await apiCentralized.createReservation(formData as ReservationData);
-      } else if (mode === 'edit' && reservation) {
-        result = await apiCentralized.updateReservation(reservation.id, formData as Partial<ReservationData>);
+      const url =
+        mode === 'create' ? '/api/v1/reservations/' : `/api/v1/reservations/${reservation.id}`;
+
+      const method = mode === 'create' ? 'POST' : 'PUT';
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error al guardar la reserva');
       }
-      
-      // Success - notify parent component
-      isOpen = false;
-      
-      // Dispatch custom event for parent component
-      const event = new CustomEvent('modalSuccess', { detail: result });
-      document.dispatchEvent(event);
-      
+
+      const result = await response.json();
+      dispatch('success', result);
+      closeModal();
     } catch (err) {
       error = (err as Error).message || 'Error al procesar la solicitud';
     } finally {
       isSubmitting = false;
     }
   }
-  
+
   function closeModal(): void {
     isOpen = false;
-    
-    // Dispatch custom event for parent component
-    const event = new CustomEvent('modalClose');
-    document.dispatchEvent(event);
+    dispatch('close');
   }
-  
-  function handleBackdropClick(event: MouseEvent): void {
+
+  function handleBackdropClick(event: any): void {
     if (event.target === event.currentTarget) {
       closeModal();
     }
   }
+
+  export function setSuccessHandler(handler: (data: any) => void): void {
+    dispatch = (event, data) => {
+      if (event === 'success') {
+        handler(data);
+      }
+    };
+  }
+
+  export function setCloseHandler(handler: () => void): void {
+    dispatch = (event) => {
+      if (event === 'close') {
+        handler();
+      }
+    };
+  }
 </script>
 
 {#if isOpen}
-  <div 
+  <div
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
     onclick={handleBackdropClick}
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="modal-title"
   >
     <div class="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
       <div class="p-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 id="modal-title" class="text-xl font-semibold text-slate-800">
-            {mode === 'create' ? 'Nueva Reserva' : mode === 'edit' ? 'Editar Reserva' : 'Ver Reserva'}
+          <h2 class="text-xl font-semibold text-slate-800">
+            {mode === 'create'
+              ? 'Nueva Reserva'
+              : mode === 'edit'
+                ? 'Editar Reserva'
+                : 'Ver Reserva'}
           </h2>
-          <button 
+          <button
             onclick={closeModal}
             class="text-slate-400 hover:text-slate-600 transition-colors"
-            aria-label="Cerrar modal"
           >
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
-        
+
         {#if error}
           <div class="mb-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg">
             {error}
           </div>
         {/if}
-        
+
         <form onsubmit={handleSubmit}>
           <div class="space-y-4">
             <div>
-              <label for="client_name" class="block text-sm font-medium text-slate-700 mb-1">
+              <label class="block text-sm font-medium text-slate-700 mb-1">
                 Nombre del Cliente *
               </label>
               <input
-                id="client_name"
                 type="text"
                 bind:value={formData.client_name}
                 required
@@ -150,39 +170,32 @@
                 class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
-              <label for="client_phone" class="block text-sm font-medium text-slate-700 mb-1">
-                Teléfono
-              </label>
+              <label class="block text-sm font-medium text-slate-700 mb-1"> Teléfono </label>
               <input
-                id="client_phone"
                 type="tel"
                 bind:value={formData.client_phone}
                 disabled={mode === 'view'}
                 class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
-              <label for="client_email" class="block text-sm font-medium text-slate-700 mb-1">
-                Email
-              </label>
+              <label class="block text-sm font-medium text-slate-700 mb-1"> Email </label>
               <input
-                id="client_email"
                 type="email"
                 bind:value={formData.client_email}
                 disabled={mode === 'view'}
                 class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
-              <label for="party_size" class="block text-sm font-medium text-slate-700 mb-1">
+              <label class="block text-sm font-medium text-slate-700 mb-1">
                 Número de Personas *
               </label>
               <input
-                id="party_size"
                 type="number"
                 bind:value={formData.party_size}
                 min="1"
@@ -192,13 +205,12 @@
                 class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
-              <label for="start_time" class="block text-sm font-medium text-slate-700 mb-1">
+              <label class="block text-sm font-medium text-slate-700 mb-1">
                 Fecha y Hora de Inicio *
               </label>
               <input
-                id="start_time"
                 type="datetime-local"
                 bind:value={formData.start_time}
                 oninput={calculateEndTime}
@@ -207,13 +219,12 @@
                 class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
-              <label for="end_time" class="block text-sm font-medium text-slate-700 mb-1">
+              <label class="block text-sm font-medium text-slate-700 mb-1">
                 Fecha y Hora de Fin *
               </label>
               <input
-                id="end_time"
                 type="datetime-local"
                 bind:value={formData.end_time}
                 required
@@ -221,13 +232,10 @@
                 class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
-              <label for="client_notes" class="block text-sm font-medium text-slate-700 mb-1">
-                Notas
-              </label>
+              <label class="block text-sm font-medium text-slate-700 mb-1"> Notas </label>
               <textarea
-                id="client_notes"
                 bind:value={formData.client_notes}
                 rows="3"
                 disabled={mode === 'view'}
@@ -235,7 +243,7 @@
               ></textarea>
             </div>
           </div>
-          
+
           {#if mode !== 'view'}
             <div class="flex gap-3 mt-6">
               <button
@@ -251,7 +259,7 @@
                 disabled={isSubmitting}
                 class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {isSubmitting ? 'Guardando...' : (mode === 'create' ? 'Crear Reserva' : 'Actualizar')}
+                {isSubmitting ? 'Guardando...' : mode === 'create' ? 'Crear Reserva' : 'Actualizar'}
               </button>
             </div>
           {:else}

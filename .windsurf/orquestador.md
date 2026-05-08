@@ -13,11 +13,14 @@ Este archivo sirve como guía central para saber qué documentación consultar s
 - Models y schemas
 - Setup de desarrollo backend
 - Testing del backend
+- Sistema de reservas de restaurante
 
 **Contenido principal:**
 - Estructura FastAPI + Poetry
 - Configuración PostgreSQL + Alembic
 - Endpoints y servicios
+- API de reservas CRUD completo
+- Sistema de disponibilidad y capacidad
 - **NO incluye** agentes (ver agent.md)
 
 ---
@@ -30,12 +33,16 @@ Este archivo sirve como guía central para saber qué documentación consultar s
 - Setup de desarrollo frontend
 - Deploy en Vercel
 - TypeScript configuration
+- Sistema de autenticación
+- Sistema de reservas de restaurante
 
 **Contenido principal:**
 - Astro 6.x + Svelte 5 (Runes)
 - Atomic design patterns
 - Componentes y layouts
 - Build y deployment
+- Authentication condicional por entorno
+- Adaptación de barbería a restaurante
 
 ---
 
@@ -119,4 +126,31 @@ Si tienes dudas sobre qué archivo consultar:
 
 ---
 
-**Última actualización**: Creación inicial del sistema de documentación modular.
+## Cambios Recientes (v2.0)
+
+### 🔄 **Actualización Mayor - Sistema de Restaurante**
+- **Backend**: Sistema completo de reservas de restaurante
+- **Frontend**: Adaptación de barbería a restaurante con autenticación condicional
+- **Authentication**: Sistema condicional por ENVIRONMENT (development/production)
+
+### 🆕 **Nuevas Características**
+- **Reservation API**: CRUD completo con availability checking
+- **Party Size System**: Gestión de capacidad del restaurante
+- **Environment Auth**: Development sin auth, production con OAuth
+- **Component Adaptation**: Header, schedule, y modal para restaurante
+
+### 📋 **Quick Reference Actualizado**
+
+| Necesitas... | Archivo a consultar |
+|-------------|-------------------|
+| Crear API endpoint de reservas | `backend.md` |
+| Crear componente de reservas | `frontend.md` |
+| Configurar auth por entorno | `frontend.md` |
+| Adaptación de barbería a restaurante | `frontend.md` + `backend.md` |
+| Debug de disponibilidad | `backend.md` |
+| Setup desarrollo sin auth | `frontend.md` |
+| Actualizar documentación | `orquestador.md` |
+
+---
+
+**Última actualización**: v2.0 - Sistema de reservas de restaurante con autenticación condicional.

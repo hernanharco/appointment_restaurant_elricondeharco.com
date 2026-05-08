@@ -13,12 +13,14 @@
       <div class="flex items-center gap-3">
         <button
           class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          onclick="openNewReservationModal()"
         >
           <span class="material-symbols-outlined text-sm">add</span>
           Nueva Reserva
         </button>
         <button
           class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          onclick="openConfigurationModal()"
         >
           <span class="material-symbols-outlined text-sm">restaurant</span>
           Configuración
@@ -42,3 +44,31 @@
     </div>
   </div>
 </header>
+
+<script>
+  // Extend Window interface for TypeScript
+  declare global {
+    interface Window {
+      openNewReservationModal?: () => void;
+      openConfigurationModal?: () => void;
+    }
+  }
+
+  function openNewReservationModal() {
+    // Dispatch custom event to open new reservation modal
+    const event = new CustomEvent('openNewReservation');
+    document.dispatchEvent(event);
+  }
+
+  function openConfigurationModal() {
+    // Dispatch custom event to open configuration modal
+    const event = new CustomEvent('openConfiguration');
+    document.dispatchEvent(event);
+  }
+
+  // Make functions globally available
+  if (typeof window !== 'undefined') {
+    window.openNewReservationModal = openNewReservationModal;
+    window.openConfigurationModal = openConfigurationModal;
+  }
+</script>

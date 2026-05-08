@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     reminders,
     telegram,
     reservations,
+    restaurant_config,
 )
 
 # 1. Creamos el router sin prefijo de versión.
@@ -58,4 +59,9 @@ api_router.include_router(telegram.router, prefix="/telegram", tags=["telegram"]
 # Dominio de Reservas
 api_router.include_router(
     reservations.router, prefix="/reservations", tags=["reservations"]
+)
+
+# Dominio de Configuración del Restaurante
+api_router.include_router(
+    restaurant_config.router, prefix="/restaurant-config", tags=["restaurant-config"]
 )

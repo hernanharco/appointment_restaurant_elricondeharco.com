@@ -1,21 +1,18 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { reservationStore } from '@/lib/stores/reservation-state.svelte';
 
-  export let selectedDate: Date = new Date();
-  const dispatch = createEventDispatcher();
-
-  // Generate days for current week
-  function getWeekDays() {
+  // Generate days for current week based on store's selectedDate
+  function getWeekDays(date: Date) {
     const days = [];
-    const startOfWeek = new Date(selectedDate);
+    const startOfWeek = new Date(date);
     const day = startOfWeek.getDay();
     const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
     startOfWeek.setDate(diff);
 
     for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      days.push(date);
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + i);
+      days.push(d);
     }
     return days;
   }
@@ -39,49 +36,48 @@
   }
 
   function isSelected(date: Date) {
-    return date.toDateString() === selectedDate.toDateString();
+    return date.toDateString() === reservationStore.selectedDate.toDateString();
   }
 
   function selectDate(date: Date) {
-    selectedDate = date;
-    dispatch('dateSelected', date);
+    reservationStore.setSelectedDate(date);
   }
 
   function previousWeek() {
-    const newDate = new Date(selectedDate);
+    const newDate = new Date(reservationStore.selectedDate);
     newDate.setDate(newDate.getDate() - 7);
-    selectedDate = newDate;
+    reservationStore.setSelectedDate(newDate);
   }
 
   function nextWeek() {
-    const newDate = new Date(selectedDate);
+    const newDate = new Date(reservationStore.selectedDate);
     newDate.setDate(newDate.getDate() + 7);
-    selectedDate = newDate;
+    reservationStore.setSelectedDate(newDate);
   }
 
-  $: weekDays = getWeekDays();
+  // Derived state for week days
+  let weekDays = $derived(getWeekDays(reservationStore.selectedDate));
 </script>
 
 <div class="days-view">
   <div class="flex items-center justify-between mb-4">
-    <button on:click={previousWeek} class="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+    <button onclick={previousWeek} class="p-2 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center">
       <span class="material-symbols-outlined">chevron_left</span>
     </button>
 
-    <div class="flex gap-1">
+    <div class="flex gap-1 overflow-x-auto no-scrollbar">
       {#each weekDays as date (date.toISOString())}
         <button
-          on:click={() => selectDate(date)}
-          class="flex flex-col items-center p-3 rounded-lg min-w-[60px] transition-colors {isSelected(
-            date,
-          )
-            ? 'bg-blue-600 text-white'
+          onclick={() => selectDate(date)}
+          class="flex flex-col items-center p-3 rounded-lg min-w-[60px] transition-all {isSelected(date)
+            ? 'bg-blue-600 text-white shadow-md transform scale-105'
             : isToday(date)
-              ? 'bg-blue-100 text-blue-700'
+              ? 'bg-blue-50 text-blue-700 border border-blue-100'
               : 'hover:bg-slate-100 text-slate-700'}"
         >
-          <span class="text-xs font-medium">{formatDayName(date)}</span>
-          <span class="text-lg font-bold mt-1">{formatDate(date)}</span>
+          <span class="text-[10px] uppercase tracking-wider font-bold opacity-80">{formatDayName(date)}</span>
+          <span class="text-lg font-bold mt-0.5">{formatDate(date).split(' ')[0]}</span>
+          <span class="text-[10px] font-medium opacity-80">{formatDate(date).split(' ')[1]}</span>
           {#if isToday(date) && !isSelected(date)}
             <div class="w-1 h-1 bg-blue-600 rounded-full mt-1"></div>
           {/if}
@@ -89,13 +85,13 @@
       {/each}
     </div>
 
-    <button on:click={nextWeek} class="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+    <button onclick={nextWeek} class="p-2 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center">
       <span class="material-symbols-outlined">chevron_right</span>
     </button>
   </div>
 
-  <div class="text-center text-sm text-slate-600">
-    {selectedDate.toLocaleDateString('es-ES', {
+  <div class="text-center text-sm font-medium text-slate-500 bg-slate-50 py-2 rounded-full capitalize">
+    {reservationStore.selectedDate.toLocaleDateString('es-ES', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -107,5 +103,13 @@
 <style>
   .days-view {
     @apply w-full;
+  }
+  
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 </style>

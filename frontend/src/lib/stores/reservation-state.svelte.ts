@@ -14,15 +14,23 @@ class ReservationStateStore {
     isLoading = $state(false);
     error = $state<string | null>(null);
 
+    // Fecha seleccionada globalmente
+    selectedDate = $state(new Date());
+
     // Métodos del modal
     openModal(date?: string) {
         this.isModalOpen = true;
-        this.dateForNewReservation = date || new Date().toISOString().split('T')[0];
+        this.dateForNewReservation = date || this.selectedDate.toISOString().split('T')[0];
     }
 
     closeModal() {
         this.isModalOpen = false;
         this.dateForNewReservation = '';
+    }
+
+    // Método para cambiar la fecha
+    setSelectedDate(date: Date) {
+        this.selectedDate = date;
     }
 
     // Métodos de gestión de reservas

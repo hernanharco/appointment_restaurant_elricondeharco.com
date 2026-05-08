@@ -4,8 +4,10 @@ import Layout from '@/layouts/Layout.astro';
 import AppointmentHeader from '@/components/appointment/AppointmentHeader.astro';
 import Appviewsday from '@/components/appointment/Appviewsday.svelte';
 import DaySchedule from '@/components/appointment/DaySchedule.svelte';
+import RestaurantConfigModal from '@/components/appointment/RestaurantConfigModal.svelte';
 
 let selectedDate = new Date();
+let isConfigModalOpen = false;
 ---
 
 <Layout title="Core Business | Gestión de Reservas">
@@ -52,10 +54,6 @@ let selectedDate = new Date();
 
     <main class="flex-1 overflow-y-auto w-full custom-scrollbar">
       <div class="max-w-10xl mx-auto px-4 pt-2">
-        <div id="days-area" class="px-5 py-4 transition-all duration-500">
-          <Appviewsday client:load on:dateSelected={(e) => (selectedDate = e.detail)} />
-        </div>
-
         <div class="flex flex-col lg:flex-row gap-6">
           <div class="flex-1 min-w-0 w-full">
             <DaySchedule {selectedDate} client:load />
@@ -64,6 +62,9 @@ let selectedDate = new Date();
       </div>
       <div class="h-12"></div>
     </main>
+
+    <!-- Restaurant Configuration Modal -->
+    <RestaurantConfigModal bind:isOpen={isConfigModalOpen} client:load />
   </div>
 </Layout>
 
@@ -81,8 +82,43 @@ let selectedDate = new Date();
     }
   }
 
+  // Handle header button events
+  function handleHeaderEvents() {
+    let selectedDate = new Date();
+
+    // Listen for new reservation button
+    const openNewReservationHandler = () => {
+      // Open reservation modal with create mode
+      const event = new CustomEvent('openReservationModal', {
+        detail: { mode: 'create', time: '', selectedDate },
+      });
+      document.dispatchEvent(event);
+    };
+
+    // Listen for configuration button
+    const openConfigurationHandler = () => {
+      // Open configuration modal via custom event
+      const event = new CustomEvent('openConfigModal');
+      document.dispatchEvent(event);
+    };
+
+    document.addEventListener('openNewReservation', openNewReservationHandler);
+    document.addEventListener('openConfiguration', openConfigurationHandler);
+
+    return () => {
+      document.removeEventListener('openNewReservation', openNewReservationHandler);
+      document.removeEventListener('openConfiguration', openConfigurationHandler);
+    };
+  }
+
   initHeaderToggle();
   document.addEventListener('astro:after-swap', initHeaderToggle);
+
+  const cleanup = handleHeaderEvents();
+  document.addEventListener('astro:after-swap', () => {
+    if (cleanup) cleanup();
+    handleHeaderEvents();
+  });
 </script>
 
 <style is:global>

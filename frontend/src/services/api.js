@@ -1,5 +1,5 @@
 // API service for restaurant reservation system
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = 'http://localhost:8003/api/v1';
 
 class ApiService {
   constructor() {
@@ -110,7 +110,7 @@ class ApiService {
 
   // Health check
   async healthCheck() {
-    return this.request('/health', { baseURL: 'http://localhost:8000' });
+    return this.request('/health', { baseURL: 'http://localhost:8003' });
   }
 }
 

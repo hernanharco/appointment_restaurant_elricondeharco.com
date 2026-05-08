@@ -1,17 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import apiService from '@/services/api.js';
+  import apiCentralized from '@/services/api-centralized.ts';
+  import { reservationStore } from '@/lib/stores/reservation-state.svelte';
   import ReservationModal from './ReservationModal.svelte';
 
-  export let selectedDate = new Date();
-
-  let reservations = [];
-  let selectedAppointment = null;
-  let isModalOpen = false;
-  let modalMode = 'create';
-  let loading = false;
-  let error = '';
-  let currentTime = new Date();
+  let reservations = $state<any[]>([]);
+  let selectedAppointment = $state<any>(null);
+  let isModalOpen = $state(false);
+  let modalMode = $state<'create' | 'edit' | 'view'>('create');
+  let loading = $state(false);
+  let error = $state('');
 
   // Generate time slots from 8:00 to 20:00
   function generateTimeSlots() {
@@ -31,17 +29,17 @@
     error = '';
 
     try {
-      const dateStr = selectedDate.toISOString().split('T')[0];
-      reservations = await apiService.getReservations(dateStr);
+      const dateStr = reservationStore.selectedDate.toISOString().split('T')[0] || '';
+      reservations = await apiCentralized.getReservationsByDate(dateStr);
     } catch (err) {
-      error = err.message || 'Error al cargar las reservas';
+      error = (err as Error).message || 'Error al cargar las reservas';
       console.error('Error loading reservations:', err);
     } finally {
       loading = false;
     }
   }
 
-  function getReservationForTime(time: string) {
+  function getReservationForTime(time: string): any {
     return reservations.find((reservation) => {
       const startTime = new Date(reservation.start_time);
       const timeStr = `${startTime.getHours().toString().padStart(2, '0')}:${startTime.getMinutes().toString().padStart(2, '0')}`;
@@ -87,31 +85,22 @@
     }
   }
 
-  function selectReservation(reservation) {
+  function selectReservation(reservation: any) {
     selectedAppointment = reservation;
     modalMode = 'view';
     isModalOpen = true;
   }
 
-  function editReservation(reservation) {
+  function editReservation(reservation: any) {
     selectedAppointment = reservation;
     modalMode = 'edit';
     isModalOpen = true;
   }
 
-  function createNewReservation(time: string) {
+  function createNewReservation(time: string): void {
     selectedAppointment = null;
     modalMode = 'create';
     isModalOpen = true;
-
-    // Pre-fill start time
-    const [hours, minutes] = time.split(':').map(Number);
-    const startTime = new Date(selectedDate);
-    startTime.setHours(hours, minutes, 0, 0);
-
-    // Set default end time (2 hours later)
-    const endTime = new Date(startTime);
-    endTime.setHours(endTime.getHours() + 2);
   }
 
   function formatDuration(startTime: string, endTime: string) {
@@ -127,134 +116,182 @@
     return `${duration}min`;
   }
 
-  function isCurrentTime(time: string) {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
+  function isPastTime(time: string): boolean {
     const [hour, minute] = time.split(':').map(Number);
-
-    if (hour < currentHour || (hour === currentHour && minute < currentMinute)) {
-      return true;
+    const slotDate = new Date(reservationStore.selectedDate);
+    if (hour && minute) {
+      slotDate.setHours(hour, minute, 0, 0);
     }
-    return false;
+
+    return slotDate < new Date();
   }
 
-  $: timeSlots = generateTimeSlots();
+  const timeSlots = generateTimeSlots();
 
   // Load reservations when selected date changes
-  $: if (selectedDate) {
+  $effect(() => {
     loadReservations();
-  }
+  });
 
-  // Update current time every minute
+  // Add event listeners for modal events
   onMount(() => {
     const interval = setInterval(() => {
-      currentTime = new Date();
+      // Update current time if needed
     }, 60000);
 
-    return () => clearInterval(interval);
+    const modalSuccessHandler = () => {
+      handleModalSuccess();
+    };
+
+    const modalCloseHandler = () => {
+      handleModalClose();
+    };
+
+    // Listen for open reservation modal from header
+    const openReservationModalHandler = (evt: Event) => {
+      const customEvent = evt as CustomEvent;
+      const { mode, time } = customEvent.detail || {};
+      if (mode === 'create') {
+        createNewReservation(time);
+      }
+    };
+
+    document.addEventListener('modalSuccess', modalSuccessHandler);
+    document.addEventListener('modalClose', modalCloseHandler);
+    document.addEventListener('openReservationModal', openReservationModalHandler);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('modalSuccess', modalSuccessHandler);
+      document.removeEventListener('modalClose', modalCloseHandler);
+      document.removeEventListener('openReservationModal', openReservationModalHandler);
+    };
   });
 
   // Handle modal events
-  function handleModalSuccess() {
+  function handleModalSuccess(): void {
     isModalOpen = false;
     loadReservations(); // Reload reservations after successful operation
   }
 
-  function handleModalClose() {
+  function handleModalClose(): void {
     isModalOpen = false;
   }
+
+  // Event handlers for modal (not used for now)
+  // function modalSuccess(event: any): void {
+  //   handleModalSuccess();
+  // }
+
+  // function modalClose(event: any): void {
+  //   handleModalClose();
+  // }
 </script>
 
 <div class="day-schedule">
-  <div class="bg-white rounded-lg border border-slate-200 overflow-hidden">
-    <div class="p-4 border-b border-slate-200 bg-slate-50">
+  <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+    <div class="p-5 border-b border-slate-200 bg-slate-50/50">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-800">Horario del Día</h2>
-        <div class="flex items-center gap-2">
-          <div class="flex items-center gap-1">
-            <div class="w-3 h-3 bg-green-100 border border-green-200 rounded"></div>
-            <span class="text-xs text-slate-600">Confirmada</span>
+        <h2 class="text-lg font-bold text-slate-800">Horario del Día</h2>
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-1.5">
+            <div class="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
+            <span class="text-[11px] font-medium text-slate-500">Confirmada</span>
           </div>
-          <div class="flex items-center gap-1">
-            <div class="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded"></div>
-            <span class="text-xs text-slate-600">Pendiente</span>
+          <div class="flex items-center gap-1.5">
+            <div class="w-2.5 h-2.5 bg-blue-500 rounded-full"></div>
+            <span class="text-[11px] font-medium text-slate-500">Programada</span>
           </div>
-          <div class="flex items-center gap-1">
-            <div class="w-3 h-3 bg-blue-100 border border-blue-200 rounded"></div>
-            <span class="text-xs text-slate-600">Completada</span>
+          <div class="flex items-center gap-1.5">
+            <div class="w-2.5 h-2.5 bg-orange-500 rounded-full"></div>
+            <span class="text-[11px] font-medium text-slate-500">En curso</span>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="max-h-[600px] overflow-y-auto custom-scrollbar">
+    <div class="max-h-[700px] overflow-y-auto custom-scrollbar">
       {#each timeSlots as time (time)}
         {@const reservation = getReservationForTime(time)}
+        {@const isPast = isPastTime(time)}
         <div
-          class="flex border-b border-slate-100 hover:bg-slate-50 transition-colors {isCurrentTime(
-            time,
-          )
-            ? 'bg-slate-50'
-            : ''}"
+          class="flex border-b border-slate-50 group transition-colors {isPast
+            ? 'bg-slate-50/30'
+            : 'hover:bg-blue-50/30'}"
         >
-          <div class="w-20 px-3 py-3 text-sm font-medium text-slate-600 border-r border-slate-100">
+          <div
+            class="w-20 px-4 py-6 text-sm font-bold {isPast
+              ? 'text-slate-400'
+              : 'text-slate-600'} border-r border-slate-50 flex items-center justify-center"
+          >
             {time}
           </div>
 
-          <div class="flex-1 px-3 py-2">
+          <div class="flex-1 p-2">
             {#if reservation}
-              <div
-                class="p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm {getStatusColor(
+              <button
+                class="w-full text-left p-4 rounded-xl border-2 transition-all hover:shadow-md {getStatusColor(
                   reservation.status,
-                )}"
-                on:click={() => selectReservation(reservation)}
+                )} flex items-center justify-between group/card"
+                onclick={() => selectReservation(reservation)}
               >
-                <div class="flex items-start justify-between">
-                  <div class="flex-1">
-                    <div class="font-medium text-sm">{reservation.client_name}</div>
-                    <div class="text-xs mt-1 opacity-80">{reservation.party_size} personas</div>
-                    <div class="flex items-center gap-2 mt-2">
-                      <span class="text-xs font-medium">
-                        {formatDuration(reservation.start_time, reservation.end_time)}
-                      </span>
-                      <span class="text-xs opacity-70">
-                        • {getStatusText(reservation.status)}
-                      </span>
-                    </div>
-                    {#if reservation.client_notes}
-                      <div class="text-xs mt-2 opacity-70 italic">
-                        "{reservation.client_notes}"
-                      </div>
-                    {/if}
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-base">{reservation.client_name}</span>
+                    <span
+                      class="px-2 py-0.5 rounded-full bg-white/50 text-[10px] font-bold uppercase tracking-tight"
+                    >
+                      {reservation.party_size} pax
+                    </span>
                   </div>
-                  <div class="flex gap-1">
-                    <button
-                      class="p-1 hover:bg-black hover:bg-opacity-10 rounded transition-colors"
-                      on:click|stopPropagation={() => editReservation(reservation)}
-                    >
-                      <span class="material-symbols-outlined text-sm">edit</span>
-                    </button>
-                    <button
-                      class="p-1 hover:bg-black hover:bg-opacity-10 rounded transition-colors"
-                    >
-                      <span class="material-symbols-outlined text-sm">more_vert</span>
-                    </button>
+                  <div class="flex items-center gap-3 mt-2">
+                    <div class="flex items-center gap-1 text-xs font-medium opacity-80">
+                      <span class="material-symbols-outlined text-sm">schedule</span>
+                      {formatDuration(reservation.start_time, reservation.end_time)}
+                    </div>
+                    <div class="flex items-center gap-1 text-xs font-medium opacity-80">
+                      <span class="material-symbols-outlined text-sm">info</span>
+                      {getStatusText(reservation.status)}
+                    </div>
+                  </div>
+                  {#if reservation.client_notes}
+                    <div class="text-xs mt-3 opacity-70 italic line-clamp-1">
+                      "{reservation.client_notes}"
+                    </div>
+                  {/if}
+                </div>
+
+                <div
+                  class="flex flex-col gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity"
+                >
+                  <div
+                    class="p-2 hover:bg-white/50 rounded-lg transition-colors cursor-pointer"
+                    onclick={() => {
+                      editReservation(reservation);
+                    }}
+                    role="button"
+                    tabindex="0"
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        editReservation(reservation);
+                      }
+                    }}
+                  >
+                    <span class="material-symbols-outlined text-lg">edit</span>
                   </div>
                 </div>
-              </div>
+              </button>
             {:else}
-              <div
-                class="p-3 text-center text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+              <button
+                class="w-full h-full min-h-[60px] flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50/50 transition-all group/btn"
+                onclick={() => createNewReservation(time)}
               >
-                <button
-                  class="flex items-center justify-center w-full py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-slate-400 hover:bg-slate-50 transition-all"
-                  on:click={() => createNewReservation(time)}
+                <span
+                  class="material-symbols-outlined text-lg group-hover/btn:scale-110 transition-transform"
+                  >add_circle</span
                 >
-                  <span class="material-symbols-outlined text-sm mr-1">add</span>
-                  <span class="text-sm">Nueva Reserva</span>
-                </button>
-              </div>
+                <span class="text-sm font-bold tracking-tight">Reservar</span>
+              </button>
             {/if}
           </div>
         </div>
@@ -263,21 +300,15 @@
   </div>
 </div>
 
-<ReservationModal
-  bind:isOpen={isModalOpen}
-  reservation={selectedAppointment}
-  mode={modalMode}
-  on:success={handleModalSuccess}
-  on:close={handleModalClose}
-/>
+<ReservationModal bind:isOpen={isModalOpen} reservation={selectedAppointment} mode={modalMode} />
 
 <style>
   .day-schedule {
-    @apply w-full;
+    width: 100%;
   }
 
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
@@ -285,11 +316,14 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 10px;
+    background: #e2e8f0;
+    border-radius: 20px;
+    border: 2px solid transparent;
+    background-clip: content-box;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #cbd5e1;
+    background-clip: content-box;
   }
 </style>

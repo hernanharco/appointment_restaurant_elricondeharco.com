@@ -158,3 +158,78 @@ Configuración para testing con:
 - Input sanitization
 - Authentication middleware
 - Environment variable protection
+
+## Authentication System
+
+### Environment-Based Authentication
+El sistema de autenticación es condicional según el entorno:
+
+#### Development Mode (`ENVIRONMENT=development`)
+- **Authentication disabled**: Acceso directo sin login
+- **Mock user**: Usuario simulado con rol SUPERADMIN
+- **Purpose**: Desarrollo rápido sin necesidad de servicio de auth
+
+#### Production Mode (`ENVIRONMENT=production`)
+- **OAuth with Google**: Flujo completo de autenticación
+- **Role-based access**: Control por roles (SUPERADMIN, ADMIN, MANAGER)
+- **JWT tokens**: Almacenamiento seguro en cookies HTTP-only
+- **Route protection**: Middleware de protección de rutas
+
+### Authentication Components
+
+#### Files
+- `src/middleware.ts` - Middleware de Astro para protección de rutas
+- `src/pages/login.astro` - Página de login con OAuth Google
+- `src/lib/api/auths.ts` - API client para autenticación
+- `src/lib/stores/auth.ts` - Svelte store para estado de auth
+- `src/pages/api/auth/` - API routes proxy para auth
+
+#### Flow
+1. **Development**: `pnpm dev` → Acceso directo → Mock user
+2. **Production**: Visita → `/login` → OAuth Google → Token → Dashboard
+
+#### Environment Variables
+```bash
+# Development
+ENVIRONMENT=development
+
+# Production  
+ENVIRONMENT=production
+PUBLIC_AUTH_API_URL=https://your-auth-api.com
+```
+
+## Restaurant Reservation System
+
+### Adapted Components
+El frontend fue adaptado de sistema de citas de barbería a reservas de restaurante:
+
+#### Key Changes
+- **AppointmentHeader.astro**: Estadísticas de restaurante (reservas, cubiertos, ocupación)
+- **DaySchedule.svelte**: Muestra party_size en lugar de servicios
+- **ReservationModal.svelte**: Formulario para reservas con capacidad y disponibilidad
+- **API Service**: `src/services/api.js` para comunicación con backend
+
+#### Data Model
+- **Party size**: Número de personas en lugar de duración de servicio
+- **Availability**: Verificación de capacidad del restaurante
+- **Status types**: scheduled, confirmed, in_progress, completed, cancelled, no_show
+- **Time slots**: Horarios de restaurante (8:00-20:00)
+
+#### Backend Integration
+- **Endpoint**: `/api/v1/reservations/` con CRUD completo
+- **Availability**: `/api/v1/availability/` para consultar horarios disponibles
+- **Clients**: `/api/v1/clients/` para gestión de clientes
+
+### Component Architecture
+```
+src/components/appointment/
+├── AppointmentHeader.astro    # Header con estadísticas
+├── Appviewsday.svelte         # Selector de fechas
+├── DaySchedule.svelte         # Horario diario con reservas
+└── ReservationModal.svelte    # Modal para crear/editar reservas
+```
+
+### API Integration
+- **Service**: `src/services/api.js` - Cliente HTTP para backend
+- **Methods**: CRUD operations, availability checking, client management
+- **Error handling**: Manejo de errores y loading states
