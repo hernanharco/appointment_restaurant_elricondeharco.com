@@ -29,24 +29,40 @@
     </div>
   </div>
 
-  <div class="flex gap-6">
-    <div class="text-center">
-      <div class="text-2xl font-bold text-slate-800">12</div>
-      <div class="text-xs text-slate-600 mt-1">Reservas Hoy</div>
+  <div class="flex gap-8">
+    <div class="flex items-center gap-3 px-5 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <div class="p-2.5 rounded-xl bg-blue-50 text-blue-600">
+        <span class="material-symbols-outlined text-xl">calendar_today</span>
+      </div>
+      <div>
+        <div id="stats-reservations" class="text-2xl font-bold text-slate-800">—</div>
+        <div class="text-xs text-slate-500 font-medium">Reservas Hoy</div>
+      </div>
     </div>
-    <div class="text-center">
-      <div class="text-2xl font-bold text-slate-800">48</div>
-      <div class="text-xs text-slate-600 mt-1">Cubiertos Ocupados</div>
+    <div class="flex items-center gap-3 px-5 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <div class="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
+        <span class="material-symbols-outlined text-xl">group</span>
+      </div>
+      <div>
+        <div id="stats-cubiertos" class="text-2xl font-bold text-slate-800">—</div>
+        <div class="text-xs text-slate-500 font-medium">Cubiertos Ocupados</div>
+      </div>
     </div>
-    <div class="text-center">
-      <div class="text-2xl font-bold text-slate-800">85%</div>
-      <div class="text-xs text-slate-600 mt-1">Ocupación</div>
+    <div class="flex items-center gap-3 px-5 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <div class="p-2.5 rounded-xl bg-amber-50 text-amber-600">
+        <span class="material-symbols-outlined text-xl">donut_large</span>
+      </div>
+      <div>
+        <div id="stats-ocupacion" class="text-2xl font-bold text-slate-800">—</div>
+        <div class="text-xs text-slate-500 font-medium">Ocupación</div>
+      </div>
     </div>
   </div>
 </header>
 
 <script>
-  // Extend Window interface for TypeScript
+  const API_URL = import.meta.env.PUBLIC_API_BACKEND;
+
   declare global {
     interface Window {
       openNewReservationModal?: () => void;
@@ -55,20 +71,79 @@
   }
 
   function openNewReservationModal() {
-    // Dispatch custom event to open new reservation modal
     const event = new CustomEvent('openNewReservation');
     document.dispatchEvent(event);
   }
 
   function openConfigurationModal() {
-    // Dispatch custom event to open configuration modal
     const event = new CustomEvent('openConfiguration');
     document.dispatchEvent(event);
   }
 
-  // Make functions globally available
   if (typeof window !== 'undefined') {
     window.openNewReservationModal = openNewReservationModal;
     window.openConfigurationModal = openConfigurationModal;
+  }
+
+  async function loadTodayStats() {
+    const today = new Date().toISOString().split('T')[0];
+    const statsEl = document.getElementById('stats-reservations');
+    const cubiertosEl = document.getElementById('stats-cubiertos');
+    const ocupacionEl = document.getElementById('stats-ocupacion');
+
+    try {
+      // Fetch daily summary
+      const summaryResp = await fetch(`${API_URL}/api/v1/reservations/daily-summary/${today}`);
+      
+      if (summaryResp.ok) {
+        const data = await summaryResp.json();
+        
+        const totalReservations = data.total_reservations ?? 0;
+        const totalPeople = data.total_people ?? 0;
+        const maxCapacity = data.max_capacity ?? 50;
+        const ocupacion = maxCapacity > 0 ? Math.round((totalPeople / maxCapacity) * 100) : 0;
+
+        statsEl.textContent = totalReservations.toString();
+        cubiertosEl.textContent = totalPeople.toString();
+        ocupacionEl.textContent = `${ocupacion}%`;
+      } else {
+        // Fallback: count reservations directly
+        const reservationsResp = await fetch(`${API_URL}/api/v1/reservations/?date=${today}`);
+        if (reservationsResp.ok) {
+          const reservations = await reservationsResp.json();
+          const count = reservations.length;
+          const people = reservations.reduce((sum: number, r: any) => sum + (r.party_size || 0), 0);
+          
+          // Get config for max capacity
+          let maxCap = 50;
+          try {
+            const configResp = await fetch(`${API_URL}/api/v1/restaurant-config/active`);
+            if (configResp.ok) {
+              const config = await configResp.json();
+              maxCap = config.max_capacity || 50;
+            }
+          } catch {}
+          
+          statsEl.textContent = count.toString();
+          cubiertosEl.textContent = people.toString();
+          ocupacionEl.textContent = maxCap > 0 ? `${Math.round((people / maxCap) * 100)}%` : '0%';
+        }
+      }
+    } catch (err) {
+      console.warn('Error loading stats:', err);
+      statsEl.textContent = '0';
+      cubiertosEl.textContent = '0';
+      ocupacionEl.textContent = '0%';
+    }
+  }
+
+  // Load on page load
+  if (typeof window !== 'undefined') {
+    loadTodayStats();
+
+    // Reload when modal succeeds (new reservation created/cancelled)
+    document.addEventListener('modalSuccess', () => {
+      setTimeout(loadTodayStats, 500);
+    });
   }
 </script>

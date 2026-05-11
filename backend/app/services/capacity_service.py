@@ -110,22 +110,27 @@ class CapacityService:
             return []
 
         # Obtener horarios de negocio para ese día
-        business_hours = self.db.query(BusinessHours).filter(
-            BusinessHours.day_of_week == date.weekday(),
-            BusinessHours.is_active == True
-        ).first()
+        weekday = date.weekday()
+        opening_time, closing_time = self._get_day_hours(weekday)
 
-        if not business_hours:
-            return []
+        # Si no hay horarios configurados, usar defaults
+        if opening_time is None or closing_time is None:
+            opening_time, closing_time = self._default_business_hours(weekday)
 
         # Generar slots basados en la configuración
         slots = []
         slot_duration = timedelta(minutes=config.time_slot_duration_minutes)
         
-        current_time = datetime.combine(date, business_hours.opening_time)
-        closing_time = datetime.combine(date, business_hours.closing_time)
+        current_time = datetime.combine(date, opening_time)
 
-        while current_time + slot_duration <= closing_time:
+        # Manejar cierre después de medianoche
+        if closing_time <= opening_time:
+            # Cierre al día siguiente — combinamos con día+1
+            closing_dt = datetime.combine(date + timedelta(days=1), closing_time)
+        else:
+            closing_dt = datetime.combine(date, closing_time)
+
+        while current_time + slot_duration <= closing_dt:
             slot_end = current_time + slot_duration
             
             # Verificar disponibilidad para este slot
@@ -175,6 +180,44 @@ class CapacityService:
             restaurant_config=config.to_dict()
         )
 
+    def _get_day_hours(self, weekday: int) -> tuple[Optional[time], Optional[time]]:
+        """
+        Obtiene la hora de apertura y cierre para un día.
+        Busca en time_slots asociados al BusinessHours del día.
+        """
+        business_hours = self.db.query(BusinessHours).filter(
+            BusinessHours.day_of_week == weekday,
+            BusinessHours.is_enabled == True
+        ).first()
+
+        if not business_hours:
+            return None, None
+
+        # Obtener el primer y último slot del día
+        slots = business_hours.time_slots
+        if not slots:
+            return None, None
+
+        opening = min(s.start_time for s in slots)
+        closing = max(s.end_time for s in slots)
+        return opening, closing
+
+    def _default_business_hours(self, weekday: int) -> tuple[time, time]:
+        """
+        Devuelve horarios por defecto si no hay configuración en DB.
+        Lunes a Viernes: 09:00-23:00, Sábado: 10:00-01:00, Domingo: 10:00-00:00
+        """
+        defaults = {
+            0: (time(9, 0), time(23, 0)),   # Lunes
+            1: (time(9, 0), time(23, 0)),   # Martes
+            2: (time(9, 0), time(23, 0)),   # Miércoles
+            3: (time(9, 0), time(23, 0)),   # Jueves
+            4: (time(9, 0), time(23, 0)),   # Viernes
+            5: (time(10, 0), time(1, 0)),   # Sábado (cierra a la 1 AM → día siguiente)
+            6: (time(10, 0), time(0, 0)),   # Domingo
+        }
+        return defaults.get(weekday, (time(9, 0), time(23, 0)))
+
     def validate_reservation_constraints(
         self, 
         party_size: int, 
@@ -205,23 +248,31 @@ class CapacityService:
 
         # Validar que esté dentro de horarios de negocio
         weekday = start_time.weekday()
-        business_hours = self.db.query(BusinessHours).filter(
-            BusinessHours.day_of_week == weekday,
-            BusinessHours.is_active == True
-        ).first()
+        opening_time, closing_time = self._get_day_hours(weekday)
 
-        if not business_hours:
-            return False, "El restaurante no abre ese día"
+        # Si no hay horarios configurados, usar defaults
+        if opening_time is None or closing_time is None:
+            opening_time, closing_time = self._default_business_hours(weekday)
 
         # Convertir a time objects para comparación
-        reservation_time = start_time.time()
-        
-        if reservation_time < business_hours.opening_time:
-            return False, f"El restaurante abre a las {business_hours.opening_time.strftime('%H:%M')}"
-        
-        # Verificar que no cierre antes de terminar la reserva
-        if end_time.time() > business_hours.closing_time:
-            return False, f"El restaurante cierra a las {business_hours.closing_time.strftime('%H:%M')}"
+        reservation_start = start_time.time()
+        reservation_end = end_time.time()
+
+        # Manejar cierre después de medianoche (ej. Sábado cierra 01:00)
+        if closing_time < opening_time:
+            # El cierre es al día siguiente
+            # Si la reserva empieza después de la medianoche y antes del cierre
+            if reservation_start >= time(0, 0) and reservation_start < closing_time:
+                pass  # Horario válido (post-medianoche)
+            elif reservation_start < opening_time:
+                return False, f"El restaurante abre a las {opening_time.strftime('%H:%M')}"
+            elif reservation_start >= closing_time and reservation_start < opening_time:
+                return False, f"El restaurante abre a las {opening_time.strftime('%H:%M')}"
+        else:
+            if reservation_start < opening_time:
+                return False, f"El restaurante abre a las {opening_time.strftime('%H:%M')}"
+            if reservation_end > closing_time:
+                return False, f"El restaurante cierra a las {closing_time.strftime('%H:%M')}"
 
         # Validar duración mínima/máxima si es necesario
         reservation_duration = end_time - start_time

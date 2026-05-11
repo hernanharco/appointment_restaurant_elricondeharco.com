@@ -1,10 +1,13 @@
 <script lang="ts">
   import apiCentralized, { type ReservationData } from '@/services/api-centralized.ts';
   
+  import { reservationStore } from '@/lib/stores/reservation-state.svelte';
+
   let { 
     isOpen = $bindable(false), 
     reservation = $bindable(null), 
-    mode = $bindable('create') // create, edit, view
+    mode = $bindable('create'), // create, edit, view
+    preselectedTime = $bindable('') // hora seleccionada desde el slot "12:00"
   } = $props();
   
   let formData = $state({
@@ -18,12 +21,14 @@
   });
   
   let isSubmitting = $state(false);
+  let isDeleting = $state(false);
+  let showDeleteConfirm = $state(false);
   let error = $state('');
   
   // Reset form when modal opens
   $effect(() => {
     if (isOpen) {
-      if (mode === 'edit' && reservation) {
+      if ((mode === 'edit' || mode === 'view') && reservation) {
         formData = {
           client_name: reservation.client_name || '',
           client_phone: reservation.client_phone || '',
@@ -34,31 +39,63 @@
           end_time: formatDateTimeForInput(reservation.end_time)
         };
       } else {
+        // Pre-fill start_time if coming from a time slot click
+        let startTime = '';
+        if (preselectedTime) {
+          const dateStr = reservationStore.selectedDate.toISOString().split('T')[0];
+          startTime = `${dateStr}T${preselectedTime}`;
+        }
+
         formData = {
           client_name: '',
           client_phone: '',
           client_email: '',
           client_notes: '',
           party_size: 2,
-          start_time: '',
+          start_time: startTime,
           end_time: ''
         };
+
+        // Auto-calculate end_time if start_time was prefilled
+        if (startTime) {
+          calculateEndTime();
+        }
       }
       error = '';
     }
   });
 
+  /** Convierte fecha ISO de la API (UTC) a string local para datetime-local input */
   function formatDateTimeForInput(dateTimeStr: any): string {
     if (!dateTimeStr) return '';
-    const date = new Date(dateTimeStr);
-    return date.toISOString().slice(0, 16);
+    const d = new Date(dateTimeStr);
+    // .toISOString() devuelve UTC, pero datetime-local necesita HORA LOCAL
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   }
   
+  /** Convierte string datetime-local a UTC ISO (sin Z, para enviar al backend) */
+  function toUtcString(localDateTime: string): string {
+    if (!localDateTime) return '';
+    const d = new Date(localDateTime);
+    return d.toISOString().slice(0, 19); // "2026-05-11T10:00:00" (UTC sin Z)
+  }
+
   function calculateEndTime(): void {
     if (formData.start_time) {
       const startTime = new Date(formData.start_time);
       const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); // 2 hours default
-      formData.end_time = endTime.toISOString().slice(0, 16);
+      // Mantenemos formato local (la conversión a UTC se hace en handleSubmit)
+      const year = endTime.getFullYear();
+      const month = String(endTime.getMonth() + 1).padStart(2, '0');
+      const day = String(endTime.getDate()).padStart(2, '0');
+      const hours = String(endTime.getHours()).padStart(2, '0');
+      const minutes = String(endTime.getMinutes()).padStart(2, '0');
+      formData.end_time = `${year}-${month}-${day}T${hours}:${minutes}`;
     }
   }
   
@@ -71,10 +108,17 @@
     try {
       let result;
       
+      // Convertir horas locales a UTC antes de enviar al backend
+      const payload = {
+        ...formData,
+        start_time: toUtcString(formData.start_time) || formData.start_time,
+        end_time: toUtcString(formData.end_time) || formData.end_time,
+      };
+      
       if (mode === 'create') {
-        result = await apiCentralized.createReservation(formData as ReservationData);
+        result = await apiCentralized.createReservation(payload as ReservationData);
       } else if (mode === 'edit' && reservation) {
-        result = await apiCentralized.updateReservation(reservation.id, formData as Partial<ReservationData>);
+        result = await apiCentralized.updateReservation(reservation.id, payload as Partial<ReservationData>);
       }
       
       // Success - notify parent component
@@ -90,7 +134,41 @@
       isSubmitting = false;
     }
   }
+
+  async function handleDelete(): Promise<void> {
+    if (isDeleting || !reservation) return;
+    
+    isDeleting = true;
+    error = '';
+    
+    try {
+      await apiCentralized.cancelReservation(reservation.id);
+      
+      isOpen = false;
+      showDeleteConfirm = false;
+      
+      const event = new CustomEvent('modalSuccess');
+      document.dispatchEvent(event);
+      
+    } catch (err) {
+      error = (err as Error).message || 'Error al cancelar la reserva';
+    } finally {
+      isDeleting = false;
+    }
+  }
+
+  function confirmDelete(): void {
+    showDeleteConfirm = true;
+  }
+
+  function cancelDelete(): void {
+    showDeleteConfirm = false;
+  }
   
+  function switchToEdit(): void {
+    mode = 'edit';
+  }
+
   function closeModal(): void {
     isOpen = false;
     
@@ -236,7 +314,36 @@
             </div>
           </div>
           
-          {#if mode !== 'view'}
+          {#if showDeleteConfirm}
+            <div class="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+              <p class="text-sm font-medium text-red-800 mb-3">
+                ¿Estás seguro de cancelar esta reserva?
+              </p>
+              <div class="flex gap-3">
+                <button
+                  type="button"
+                  onclick={cancelDelete}
+                  disabled={isDeleting}
+                  class="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-white transition-colors disabled:opacity-50"
+                >
+                  No, mantener
+                </button>
+                <button
+                  type="button"
+                  onclick={handleDelete}
+                  disabled={isDeleting}
+                  class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {#if isDeleting}
+                    Cancelando...
+                  {:else}
+                    <span class="material-symbols-outlined text-sm">delete</span>
+                    Sí, cancelar
+                  {/if}
+                </button>
+              </div>
+            </div>
+          {:else if mode === 'create'}
             <div class="flex gap-3 mt-6">
               <button
                 type="button"
@@ -249,17 +356,61 @@
               <button
                 type="submit"
                 disabled={isSubmitting}
-                class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {isSubmitting ? 'Guardando...' : (mode === 'create' ? 'Crear Reserva' : 'Actualizar')}
+                {#if isSubmitting}
+                  Guardando...
+                {:else}
+                  <span class="material-symbols-outlined text-sm">add</span>
+                  Crear Reserva
+                {/if}
               </button>
             </div>
-          {:else}
-            <div class="mt-6">
+          {:else if mode === 'edit'}
+            <div class="flex gap-3 mt-6">
               <button
                 type="button"
                 onclick={closeModal}
-                class="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                disabled={isSubmitting}
+                class="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onclick={confirmDelete}
+                disabled={isSubmitting}
+                class="px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <span class="material-symbols-outlined text-sm">delete</span>
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {#if isSubmitting}
+                  Guardando...
+                {:else}
+                  <span class="material-symbols-outlined text-sm">save</span>
+                  Actualizar
+                {/if}
+              </button>
+            </div>
+          {:else}
+            <div class="mt-6 flex gap-3">
+              <button
+                type="button"
+                onclick={switchToEdit}
+                class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <span class="material-symbols-outlined text-sm">edit</span>
+                Editar Reserva
+              </button>
+              <button
+                type="button"
+                onclick={closeModal}
+                class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 Cerrar
               </button>

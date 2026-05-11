@@ -1,9 +1,12 @@
 /**
  * API Centralizada para CoreAppointment
  * Maneja toda la comunicación con el backend desde un solo lugar
+ * Usa las variables de entorno del .env — sin puertos hardcodeados.
  */
 
-const API_BASE_URL = 'http://localhost:8003/api/v1';
+const BASE_URL      = import.meta.env.PUBLIC_API_BACKEND ?? 'http://localhost:8003';
+const V1            = import.meta.env.PUBLIC_API_VERSION ?? '/api/v1';
+const API_BASE_URL  = `${BASE_URL}${V1}`;
 
 
 interface ReservationData {
@@ -199,10 +202,10 @@ class ApiCentralized {
 
   /**
    * Verificar salud del API
+   * Usa la misma BASE_URL que el resto de la clase (desde .env)
    */
   async healthCheck(): Promise<any> {
-    const url = 'http://localhost:8000/health';
-    const response = await fetch(url);
+    const response = await fetch(`${BASE_URL}/health`);
 
     if (!response.ok) {
       throw new Error(`Health check failed: ${response.status}`);

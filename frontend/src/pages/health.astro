@@ -1,0 +1,202 @@
+---
+// src/pages/health.astro
+// Panel de diagnóstico: verifica la comunicación frontend ↔ backend
+import Layout from '@/layouts/Layout.astro';
+---
+
+<Layout title="Health Check | Core Business">
+  <div class="min-h-screen bg-slate-50 p-6">
+    <div class="max-w-2xl mx-auto">
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h1 class="text-2xl font-black text-slate-900 tracking-tight">
+            🔍 Health Check
+          </h1>
+          <p class="text-sm text-slate-500 mt-1">
+            Diagnóstico de conexión entre Frontend y Backend
+          </p>
+        </div>
+        <a
+          href="/"
+          class="text-sm text-slate-500 hover:text-blue-600 transition-colors underline underline-offset-4"
+        >
+          ← Volver al inicio
+        </a>
+      </div>
+
+      <!-- Tarjeta: Backend -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 mb-4">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-slate-800">Conexión con Backend</h2>
+          <button
+            id="refresh-btn"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all active:scale-95"
+          >
+            <span id="refresh-icon" class="inline-block">⟳</span>
+            Verificar
+          </button>
+        </div>
+
+        <!-- Resultado del health check -->
+        <div id="health-result" class="space-y-3">
+          <div class="flex items-center gap-3 p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <div id="status-dot" class="w-3 h-3 rounded-full bg-slate-300"></div>
+            <div>
+              <div id="status-text" class="text-sm font-semibold text-slate-500">Verificando...</div>
+              <div id="status-detail" class="text-xs text-slate-400 mt-0.5">Esperando respuesta del servidor</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">Backend URL</div>
+              <div id="backend-url" class="text-sm font-semibold text-slate-700 mt-1 font-mono">—</div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">Environment</div>
+              <div id="backend-env" class="text-sm font-semibold text-slate-700 mt-1">—</div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">Timestamp</div>
+              <div id="backend-ts" class="text-sm font-semibold text-slate-700 mt-1 font-mono">—</div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <div class="text-xs text-slate-400 font-medium uppercase tracking-wider">HTTP Status</div>
+              <div id="http-status" class="text-sm font-semibold text-slate-700 mt-1">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjeta: Endpoints disponibles -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 mb-4">
+        <h2 class="text-lg font-bold text-slate-800 mb-4">Endpoints del Backend</h2>
+        <div class="space-y-2">
+          <div class="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <span class="px-2 py-0.5 text-xs font-bold bg-green-100 text-green-700 rounded-lg">GET</span>
+            <code class="text-sm font-mono text-slate-700">/health</code>
+            <span class="text-xs text-slate-400 ml-auto">Estado del servidor</span>
+          </div>
+          <div class="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <span class="px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-700 rounded-lg">GET</span>
+            <code class="text-sm font-mono text-slate-700">/api/v1/reservations/</code>
+            <span class="text-xs text-slate-400 ml-auto">Lista de reservas</span>
+          </div>
+          <div class="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <span class="px-2 py-0.5 text-xs font-bold bg-purple-100 text-purple-700 rounded-lg">POST</span>
+            <code class="text-sm font-mono text-slate-700">/api/v1/reservations/</code>
+            <span class="text-xs text-slate-400 ml-auto">Crear reserva</span>
+          </div>
+          <div class="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <span class="px-2 py-0.5 text-xs font-bold bg-emerald-100 text-emerald-700 rounded-lg">GET</span>
+            <code class="text-sm font-mono text-slate-700">/api/v1/availability/</code>
+            <span class="text-xs text-slate-400 ml-auto">Disponibilidad</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjeta: Info del Frontend -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+        <h2 class="text-lg font-bold text-slate-800 mb-4">Configuración del Frontend</h2>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between p-2">
+            <span class="text-slate-500">Modo</span>
+            <span class="font-semibold text-slate-700" id="frontend-mode">—</span>
+          </div>
+          <div class="flex justify-between p-2 border-t border-slate-100">
+            <span class="text-slate-500">Frontend URL</span>
+            <span class="font-semibold text-slate-700 font-mono" id="frontend-url">—</span>
+          </div>
+          <div class="flex justify-between p-2 border-t border-slate-100">
+            <span class="text-slate-500">API Backend</span>
+            <span class="font-semibold text-slate-700 font-mono" id="frontend-api-url">—</span>
+          </div>
+          <div class="flex justify-between p-2 border-t border-slate-100">
+            <span class="text-slate-500">Auth API</span>
+            <span class="font-semibold text-slate-700 font-mono" id="frontend-auth-url">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  const BACKEND_URL = import.meta.env.PUBLIC_API_BACKEND ?? 'http://localhost:8003';
+  const AUTH_URL    = import.meta.env.PUBLIC_AUTH_API_URL ?? '—';
+  const ENV         = import.meta.env.ENVIRONMENT ?? 'development';
+
+  const statusDot   = document.getElementById('status-dot');
+  const statusText  = document.getElementById('status-text');
+  const statusDetail = document.getElementById('status-detail');
+  const backendUrl  = document.getElementById('backend-url');
+  const backendEnv  = document.getElementById('backend-env');
+  const backendTs   = document.getElementById('backend-ts');
+  const httpStatus  = document.getElementById('http-status');
+
+  function setStatus(ok: boolean, statusCode?: number) {
+    if (ok) {
+      statusDot.className = 'w-3 h-3 rounded-full bg-emerald-500';
+      statusText.textContent = '✅ Backend saludable';
+      statusText.className = 'text-sm font-semibold text-emerald-700';
+      statusDetail.textContent = 'El frontend se comunica correctamente con el backend';
+      statusDetail.className = 'text-xs text-emerald-600 mt-0.5';
+    } else {
+      statusDot.className = 'w-3 h-3 rounded-full bg-red-500';
+      statusText.textContent = '❌ Backend no responde';
+      statusText.className = 'text-sm font-semibold text-red-700';
+      statusDetail.textContent = 'No se puede establecer conexión con el servidor';
+      statusDetail.className = 'text-xs text-red-600 mt-0.5';
+    }
+    if (statusCode) {
+      httpStatus.textContent = `${statusCode}`;
+    }
+  }
+
+  async function checkHealth() {
+    const refreshIcon = document.getElementById('refresh-icon');
+    const refreshBtn = document.getElementById('refresh-btn') as HTMLButtonElement;
+    
+    refreshBtn!.disabled = true;
+    refreshIcon!.className = 'inline-block animate-spin';
+    statusText.textContent = 'Verificando...';
+    statusText.className = 'text-sm font-semibold text-slate-500';
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/health`);
+      const data = await response.json();
+
+      backendUrl.textContent = BACKEND_URL;
+      backendEnv.textContent = data.environment ?? '—';
+      backendTs.textContent = data.timestamp ?? '—';
+      
+      if (response.ok && data.status === 'healthy') {
+        setStatus(true, response.status);
+      } else {
+        setStatus(false, response.status);
+      }
+    } catch (err) {
+      backendUrl.textContent = BACKEND_URL;
+      backendEnv.textContent = '—';
+      backendTs.textContent = '—';
+      setStatus(false);
+    } finally {
+      refreshBtn!.disabled = false;
+      refreshIcon!.className = 'inline-block';
+    }
+  }
+
+  function setFrontendInfo() {
+    document.getElementById('frontend-mode')!.textContent = ENV;
+    document.getElementById('frontend-url')!.textContent = window.location.origin;
+    document.getElementById('frontend-api-url')!.textContent = BACKEND_URL;
+    document.getElementById('frontend-auth-url')!.textContent = AUTH_URL;
+  }
+
+  // --- Init ---
+  setFrontendInfo();
+  checkHealth();
+
+  document.getElementById('refresh-btn')!.addEventListener('click', checkHealth);
+</script>

@@ -5,7 +5,7 @@ Este endpoint maneja el CRUD completo de reservas.
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from datetime import datetime, date
+from datetime import datetime, date as date_class, timedelta
 from typing import List, Optional
 
 from app.db.session import get_db
@@ -63,12 +63,12 @@ def get_reservations(
             return service.get_reservations_by_date(target_date)
         else:
             # Si no hay fecha, devolver reservas de hoy en adelante
-            today = date.today()
+            today = date_class.today()
             all_reservations = []
-            
+
             # Obtener reservas de los próximos 30 días
             for i in range(30):
-                current_date = today.replace(day=today.day + i) if today.day + i <= 31 else today.replace(month=today.month + 1, day=(today.day + i) - 31)
+                current_date = today + timedelta(days=i)
                 day_reservations = service.get_reservations_by_date(current_date)
                 all_reservations.extend(day_reservations)
             

@@ -8,8 +8,22 @@
   let selectedAppointment = $state<any>(null);
   let isModalOpen = $state(false);
   let modalMode = $state<'create' | 'edit' | 'view'>('create');
+  let selectedTime = $state<string>('');
   let loading = $state(false);
   let error = $state('');
+
+  // Slots expandidos (con 2+ reservas)
+  let expandedSlots = $state(new Set<string>());
+
+  function toggleSlot(time: string) {
+    if (expandedSlots.has(time)) {
+      expandedSlots.delete(time);
+    } else {
+      expandedSlots.add(time);
+    }
+    // Forzar reactividad con nuevo Set
+    expandedSlots = new Set(expandedSlots);
+  }
 
   // Generate time slots from 8:00 to 20:00
   function generateTimeSlots() {
@@ -30,7 +44,9 @@
 
     try {
       const dateStr = reservationStore.selectedDate.toISOString().split('T')[0] || '';
-      reservations = await apiCentralized.getReservationsByDate(dateStr);
+      const all = await apiCentralized.getReservationsByDate(dateStr);
+      // Filtrar solo reservas activas (no canceladas ni no-show)
+      reservations = all.filter(r => r.status !== 'cancelled' && r.status !== 'no_show');
     } catch (err) {
       error = (err as Error).message || 'Error al cargar las reservas';
       console.error('Error loading reservations:', err);
@@ -39,8 +55,8 @@
     }
   }
 
-  function getReservationForTime(time: string): any {
-    return reservations.find((reservation) => {
+  function getReservationsForTime(time: string): any[] {
+    return reservations.filter((reservation) => {
       const startTime = new Date(reservation.start_time);
       const timeStr = `${startTime.getHours().toString().padStart(2, '0')}:${startTime.getMinutes().toString().padStart(2, '0')}`;
       return timeStr === time;
@@ -99,6 +115,7 @@
 
   function createNewReservation(time: string): void {
     selectedAppointment = null;
+    selectedTime = time;
     modalMode = 'create';
     isModalOpen = true;
   }
@@ -212,8 +229,11 @@
 
     <div class="max-h-[700px] overflow-y-auto custom-scrollbar">
       {#each timeSlots as time (time)}
-        {@const reservation = getReservationForTime(time)}
+        {@const slotReservations = getReservationsForTime(time)}
+        {@const count = slotReservations.length}
         {@const isPast = isPastTime(time)}
+        {@const isExpanded = expandedSlots.has(time)}
+        {@const totalPeople = slotReservations.reduce((sum, r) => sum + (r.party_size || 0), 0)}
         <div
           class="flex border-b border-slate-50 group transition-colors {isPast
             ? 'bg-slate-50/30'
@@ -228,60 +248,8 @@
           </div>
 
           <div class="flex-1 p-2">
-            {#if reservation}
-              <button
-                class="w-full text-left p-4 rounded-xl border-2 transition-all hover:shadow-md {getStatusColor(
-                  reservation.status,
-                )} flex items-center justify-between group/card"
-                onclick={() => selectReservation(reservation)}
-              >
-                <div class="flex-1">
-                  <div class="flex items-center gap-2">
-                    <span class="font-bold text-base">{reservation.client_name}</span>
-                    <span
-                      class="px-2 py-0.5 rounded-full bg-white/50 text-[10px] font-bold uppercase tracking-tight"
-                    >
-                      {reservation.party_size} pax
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-3 mt-2">
-                    <div class="flex items-center gap-1 text-xs font-medium opacity-80">
-                      <span class="material-symbols-outlined text-sm">schedule</span>
-                      {formatDuration(reservation.start_time, reservation.end_time)}
-                    </div>
-                    <div class="flex items-center gap-1 text-xs font-medium opacity-80">
-                      <span class="material-symbols-outlined text-sm">info</span>
-                      {getStatusText(reservation.status)}
-                    </div>
-                  </div>
-                  {#if reservation.client_notes}
-                    <div class="text-xs mt-3 opacity-70 italic line-clamp-1">
-                      "{reservation.client_notes}"
-                    </div>
-                  {/if}
-                </div>
-
-                <div
-                  class="flex flex-col gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity"
-                >
-                  <div
-                    class="p-2 hover:bg-white/50 rounded-lg transition-colors cursor-pointer"
-                    onclick={() => {
-                      editReservation(reservation);
-                    }}
-                    role="button"
-                    tabindex="0"
-                    onkeydown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        editReservation(reservation);
-                      }
-                    }}
-                  >
-                    <span class="material-symbols-outlined text-lg">edit</span>
-                  </div>
-                </div>
-              </button>
-            {:else}
+            {#if count === 0}
+              <!-- Slot vacío → botón Reservar -->
               <button
                 class="w-full h-full min-h-[60px] flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50/50 transition-all group/btn"
                 onclick={() => createNewReservation(time)}
@@ -292,6 +260,142 @@
                 >
                 <span class="text-sm font-bold tracking-tight">Reservar</span>
               </button>
+
+            {:else if count === 1}
+              <!-- 1 reserva → tarjeta normal (como antes) -->
+              {@const s = slotReservations[0]}
+              <button
+                class="w-full text-left p-4 rounded-xl border-2 transition-all hover:shadow-md {getStatusColor(
+                  s.status,
+                )} flex items-center justify-between group/card"
+                onclick={() => selectReservation(s)}
+              >
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-base">{s.client_name}</span>
+                    <span
+                      class="px-2 py-0.5 rounded-full bg-white/50 text-[10px] font-bold uppercase tracking-tight"
+                    >
+                      {s.party_size} pax
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-3 mt-2">
+                    <div class="flex items-center gap-1 text-xs font-medium opacity-80">
+                      <span class="material-symbols-outlined text-sm">schedule</span>
+                      {formatDuration(s.start_time, s.end_time)}
+                    </div>
+                    <div class="flex items-center gap-1 text-xs font-medium opacity-80">
+                      <span class="material-symbols-outlined text-sm">info</span>
+                      {getStatusText(s.status)}
+                    </div>
+                  </div>
+                  {#if s.client_notes}
+                    <div class="text-xs mt-3 opacity-70 italic line-clamp-1">
+                      "{s.client_notes}"
+                    </div>
+                  {/if}
+                </div>
+
+                <div
+                  class="flex flex-col gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity"
+                >
+                  <div
+                    class="p-2 hover:bg-white/50 rounded-lg transition-colors cursor-pointer"
+                    onclick={() => {
+                      editReservation(s);
+                    }}
+                    role="button"
+                    tabindex="0"
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        editReservation(s);
+                      }
+                    }}
+                  >
+                    <span class="material-symbols-outlined text-lg">edit</span>
+                  </div>
+                </div>
+              </button>
+
+            {:else}
+              <!-- 2+ reservas → colapsable -->
+              <div class="border-2 border-slate-200 rounded-xl overflow-hidden transition-all">
+                <!-- Chip colapsado -->
+                <button
+                  class="w-full flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+                  onclick={() => toggleSlot(time)}
+                >
+                  <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-lg text-slate-500">calendar_month</span>
+                    <span class="text-sm font-bold text-slate-700">
+                      {count} {count === 1 ? 'reserva' : 'reservas'}
+                    </span>
+                    <span class="px-2 py-0.5 rounded-full bg-white text-[10px] font-bold text-slate-500 border border-slate-200">
+                      {totalPeople} pax
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1.5 text-slate-400">
+                    <span class="text-xs font-medium">{isExpanded ? 'Colapsar' : 'Ver'}</span>
+                    <span
+                      class="material-symbols-outlined text-lg transition-transform {isExpanded
+                        ? 'rotate-180'
+                        : ''}"
+                    >
+                      expand_more
+                    </span>
+                  </div>
+                </button>
+
+                <!-- Lista expandida -->
+                {#if isExpanded}
+                  <div class="divide-y divide-slate-100 border-t border-slate-200">
+                    {#each slotReservations as s (s.id)}
+                      <div
+                        class="flex items-center justify-between px-4 py-3 hover:bg-blue-50/30 transition-colors cursor-pointer"
+                        onclick={() => selectReservation(s)}
+                      >
+                        <div class="flex items-center gap-3 min-w-0">
+                          <div
+                            class="w-1.5 h-8 rounded-full shrink-0 {s.status === 'confirmed'
+                              ? 'bg-green-500'
+                              : 'bg-blue-500'}"
+                          ></div>
+                          <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                              <span class="font-bold text-sm text-slate-800 truncate">{s.client_name}</span>
+                              <span
+                                class="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-bold text-slate-600"
+                              >
+                                {s.party_size} pax
+                              </span>
+                            </div>
+                            {#if s.client_notes}
+                              <div class="text-xs text-slate-500 truncate mt-0.5">{s.client_notes}</div>
+                            {/if}
+                          </div>
+                        </div>
+                        <div
+                          class="shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                          onclick={(e) => {
+                            e.stopPropagation();
+                            editReservation(s);
+                          }}
+                          role="button"
+                          tabindex="0"
+                          onkeydown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.stopPropagation();
+                              editReservation(s);
+                            }
+                          }}
+                        >
+                          <span class="material-symbols-outlined text-base">edit</span>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -300,7 +404,7 @@
   </div>
 </div>
 
-<ReservationModal bind:isOpen={isModalOpen} reservation={selectedAppointment} mode={modalMode} />
+<ReservationModal bind:isOpen={isModalOpen} reservation={selectedAppointment} mode={modalMode} preselectedTime={selectedTime} />
 
 <style>
   .day-schedule {
