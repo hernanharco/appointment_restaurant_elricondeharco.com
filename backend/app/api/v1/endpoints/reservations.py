@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from datetime import datetime, date as date_class, timedelta
 from typing import List, Optional
+import csv
+import io
 
 from app.db.session import get_db
 from app.services.reservation_service import ReservationService
@@ -242,3 +244,182 @@ def get_daily_summary(date: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al obtener el resumen"
         )
+
+
+# ─── Historial, Estadísticas y Exportación ─────────────────────────────
+
+
+@router.get("/history")
+def get_reservation_history(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Obtiene historial paginado de reservas con filtros."""
+    try:
+        service = ReservationService(db)
+
+        start = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
+        end = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
+
+        return service.get_history(
+            page=page,
+            per_page=per_page,
+            start_date=start,
+            end_date=end,
+            status_filter=status,
+            search=search,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD")
+    except Exception as e:
+        print(f"Error en historial: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al obtener el historial")
+
+
+@router.get("/stats")
+def get_reservation_stats(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Obtiene estadísticas agregadas del historial."""
+    try:
+        service = ReservationService(db)
+
+        start = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
+        end = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
+
+        return service.get_stats(start_date=start, end_date=end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD")
+    except Exception as e:
+        print(f"Error en stats: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al obtener estadísticas")
+
+
+@router.get("/export/csv")
+def export_reservations_csv(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Exporta reservas a CSV."""
+    try:
+        service = ReservationService(db)
+        start = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
+        end = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
+
+        result = service.get_history(
+            page=1, per_page=10000,
+            start_date=start, end_date=end,
+            status_filter=status,
+        )
+        reservations = result["items"]
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Fecha", "Hora", "Cliente", "Teléfono", "Email", "Personas", "Estado", "Origen", "Notas", "Creado"])
+
+        for r in reservations:
+            start_dt = r.start_time.strftime("%Y-%m-%d %H:%M") if r.start_time else ""
+            writer.writerow([
+                r.id, start_dt.split(" ")[0] if start_dt else "",
+                start_dt.split(" ")[1] if " " in start_dt else "",
+                r.client_name, r.client_phone, r.client_email or "",
+                r.party_size, r.status, r.source or "manual",
+                r.client_notes or "", r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "",
+            ])
+
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=historial_reservas.csv"},
+        )
+    except Exception as e:
+        print(f"Error exportando CSV: {e}")
+        raise HTTPException(status_code=500, detail="Error al exportar CSV")
+
+
+@router.get("/export/excel")
+def export_reservations_excel(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Exporta reservas a Excel (.xlsx)."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        service = ReservationService(db)
+        start = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
+        end = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
+
+        result = service.get_history(
+            page=1, per_page=10000,
+            start_date=start, end_date=end,
+            status_filter=status,
+        )
+        reservations = result["items"]
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Historial de Reservas"
+
+        # Encabezados
+        headers = ["ID", "Fecha", "Hora", "Cliente", "Teléfono", "Email", "Personas", "Estado", "Origen", "Notas", "Creado"]
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")
+        thin_border = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin"),
+        )
+
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center")
+            cell.border = thin_border
+
+        # Datos
+        for i, r in enumerate(reservations, 2):
+            start_dt = r.start_time.strftime("%Y-%m-%d %H:%M") if r.start_time else ""
+            ws.cell(row=i, column=1, value=r.id)
+            ws.cell(row=i, column=2, value=start_dt.split(" ")[0] if start_dt else "")
+            ws.cell(row=i, column=3, value=start_dt.split(" ")[1] if " " in start_dt else "")
+            ws.cell(row=i, column=4, value=r.client_name)
+            ws.cell(row=i, column=5, value=r.client_phone)
+            ws.cell(row=i, column=6, value=r.client_email or "")
+            ws.cell(row=i, column=7, value=r.party_size)
+            ws.cell(row=i, column=8, value=r.status)
+            ws.cell(row=i, column=9, value=r.source or "manual")
+            ws.cell(row=i, column=10, value=r.client_notes or "")
+            ws.cell(row=i, column=11, value=r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "")
+
+        # Ajustar ancho de columnas
+        col_widths = [6, 12, 8, 25, 15, 25, 10, 14, 10, 30, 18]
+        for i, width in enumerate(col_widths, 1):
+            ws.column_dimensions[chr(64 + i) if i <= 26 else ""].width = width
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=historial_reservas.xlsx"},
+        )
+    except Exception as e:
+        print(f"Error exportando Excel: {e}")
+        raise HTTPException(status_code=500, detail="Error al exportar Excel")

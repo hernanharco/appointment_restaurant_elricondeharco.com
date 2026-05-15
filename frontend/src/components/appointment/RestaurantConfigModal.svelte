@@ -2,7 +2,10 @@
   import { onMount } from 'svelte';
   import apiCentralized from '@/services/api-centralized.ts';
 
-  let { isOpen = $bindable(false) } = $props();
+  let { isOpen: _propOpen = false, onClose = () => {} } = $props();
+  
+  // Estado local para controlar visibilidad (el prop es readonly)
+  let isOpen = $state(_propOpen);
 
   let config = $state({
     restaurantName: 'Mi Restaurante',
@@ -27,6 +30,7 @@
 
   function closeModal(): void {
     isOpen = false;
+    onClose?.();
     error = '';
     success = '';
   }
@@ -45,7 +49,7 @@
     success = '';
 
     try {
-      // Guardar configuración en la API
+      // 1. Guardar configuración (capacidad)
       const configData = {
         name: config.restaurantName,
         max_capacity: config.maxCapacity,
@@ -56,6 +60,26 @@
       };
 
       await apiCentralized.createRestaurantConfig(configData);
+
+      // 2. Guardar horarios por día
+      const daysPayload = config.daysOfWeek.map((day) => ({
+        day_of_week: day.day,
+        day_name: day.name,
+        is_enabled: day.isOpen,
+        is_split_shift: false,
+        time_slots:
+          day.isOpen && day.openTime && day.closeTime
+            ? [
+                {
+                  start_time: day.openTime,
+                  end_time: day.closeTime,
+                  slot_order: 1,
+                },
+              ]
+            : [],
+      }));
+
+      await apiCentralized.updateRestaurantHours({ days: daysPayload });
 
       success = 'Configuración guardada exitosamente';
 
@@ -77,17 +101,38 @@
   // Load configuration from API
   async function loadConfig(): Promise<void> {
     try {
-      const activeConfig = await apiCentralized.getActiveRestaurantConfig();
-      if (activeConfig) {
-        config = {
-          restaurantName: activeConfig.name || 'Mi Restaurante',
-          maxCapacity: activeConfig.max_capacity || 50,
-          openingTime: '08:00',
-          closingTime: '22:00',
-          averageTurnTime: activeConfig.time_slot_duration_minutes || 120,
-          daysOfWeek: config.daysOfWeek, // Keep existing days structure
-        };
+      const [activeConfig, hoursData] = await Promise.all([
+        apiCentralized.getActiveRestaurantConfig(),
+        apiCentralized.getRestaurantHours().catch(() => null), // puede no tener horarios aún
+      ]);
+
+      // Mapa de días por day_of_week
+      const hoursMap = new Map<number, any>();
+      if (hoursData?.days) {
+        for (const day of hoursData.days) {
+          if (day.time_slots && day.time_slots.length > 0) {
+            hoursMap.set(day.day_of_week, {
+              isOpen: day.is_enabled,
+              openTime: day.time_slots[0].start_time,
+              closeTime: day.time_slots[0].end_time,
+            });
+          }
+        }
       }
+
+      config = {
+        restaurantName: activeConfig?.name || 'Mi Restaurante',
+        maxCapacity: activeConfig?.max_capacity || 50,
+        openingTime: '08:00',
+        closingTime: '22:00',
+        averageTurnTime: activeConfig?.time_slot_duration_minutes || 120,
+        daysOfWeek: config.daysOfWeek.map((day) => {
+          const saved = hoursMap.get(day.day);
+          return saved
+            ? { ...day, isOpen: saved.isOpen, openTime: saved.openTime, closeTime: saved.closeTime }
+            : day;
+        }),
+      };
     } catch (err) {
       error = (err as Error).message || 'Error al cargar la configuración';
     }
@@ -100,10 +145,11 @@
       loadConfig(); // Load config when modal opens
     };
 
-    document.addEventListener('openConfigModal', openConfigHandler);
+    // El header dispara 'openConfiguration'
+    document.addEventListener('openConfiguration', openConfigHandler);
 
     return () => {
-      document.removeEventListener('openConfigModal', openConfigHandler);
+      document.removeEventListener('openConfiguration', openConfigHandler);
     };
   });
 </script>
@@ -127,6 +173,7 @@
             Configuración del Restaurante
           </h2>
           <button
+            type="button"
             onclick={closeModal}
             class="text-slate-400 hover:text-slate-600 transition-colors"
             aria-label="Cerrar modal"

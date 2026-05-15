@@ -6,6 +6,7 @@ Este módulo agrupa todos los endpoints de la versión 1 de la API.
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
     business_hours,
+    restaurant_hours,
     availability,
     ai_whatsapp,
     clients,
@@ -59,6 +60,11 @@ api_router.include_router(telegram.router, prefix="/telegram", tags=["telegram"]
 # Dominio de Reservas
 api_router.include_router(
     reservations.router, prefix="/reservations", tags=["reservations"]
+)
+
+# Dominio de Horarios del Restaurante (sin colaboradores)
+api_router.include_router(
+    restaurant_hours.router, prefix="/restaurant-hours", tags=["restaurant-hours"]
 )
 
 # Dominio de Configuración del Restaurante

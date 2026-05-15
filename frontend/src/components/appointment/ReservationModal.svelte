@@ -1,13 +1,14 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import apiCentralized, { type ReservationData } from '@/services/api-centralized.ts';
   
   import { reservationStore } from '@/lib/stores/reservation-state.svelte';
 
   let { 
-    isOpen = $bindable(false), 
-    reservation = $bindable(null), 
-    mode = $bindable('create'), // create, edit, view
-    preselectedTime = $bindable('') // hora seleccionada desde el slot "12:00"
+    reservation = null, 
+    mode = 'create', // create, edit, view
+    preselectedTime = '', // hora seleccionada desde el slot "12:00"
+    onClose = () => {} // callback para cerrar desde el padre
   } = $props();
   
   let formData = $state({
@@ -24,46 +25,81 @@
   let isDeleting = $state(false);
   let showDeleteConfirm = $state(false);
   let error = $state('');
-  
-  // Reset form when modal opens
-  $effect(() => {
-    if (isOpen) {
-      if ((mode === 'edit' || mode === 'view') && reservation) {
-        formData = {
-          client_name: reservation.client_name || '',
-          client_phone: reservation.client_phone || '',
-          client_email: reservation.client_email || '',
-          client_notes: reservation.client_notes || '',
-          party_size: reservation.party_size || 2,
-          start_time: formatDateTimeForInput(reservation.start_time),
-          end_time: formatDateTimeForInput(reservation.end_time)
-        };
-      } else {
-        // Pre-fill start_time if coming from a time slot click
-        let startTime = '';
-        if (preselectedTime) {
-          const dateStr = reservationStore.selectedDate.toISOString().split('T')[0];
-          startTime = `${dateStr}T${preselectedTime}`;
-        }
 
-        formData = {
-          client_name: '',
-          client_phone: '',
-          client_email: '',
-          client_notes: '',
-          party_size: 2,
-          start_time: startTime,
-          end_time: ''
-        };
+  // Timezone configurable desde .env (PUBLIC_TIMEZONE=Europe/Madrid)
+  const TIMEZONE = import.meta.env.PUBLIC_TIMEZONE ?? 'Europe/Madrid';
 
-        // Auto-calculate end_time if start_time was prefilled
-        if (startTime) {
-          calculateEndTime();
-        }
-      }
-      error = '';
+  /** Obtiene "YYYY-MM-DDTHH:mm" en la timezone configurada */
+  function getNowInTimezone(): string {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(now);
+
+    const p = (type: string) => parts.find(p => p.type === type)?.value ?? '00';
+    return `${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}`;
+  }
+
+  /** Redondea al próximo slot de 30 min (ej: 10:23 → 10:30, 10:00 → 10:00) */
+  function roundToNextSlot(dateTimeStr: string): string {
+    const [datePart, timePart] = dateTimeStr.split('T');
+    const [h, m] = timePart.split(':').map(Number);
+    if (m === 0) return dateTimeStr; // Ya está en un slot exacto
+    const nextM = Math.ceil(m / 30) * 30;
+    if (nextM === 60) {
+      const nh = (h + 1) % 24;
+      return `${datePart}T${String(nh).padStart(2, '0')}:00`;
     }
-  });
+    return `${datePart}T${String(h).padStart(2, '0')}:${String(nextM).padStart(2, '0')}`;
+  }
+  
+  // Inicializar formData — SOLO en onMount, no en $effect (evita loops de reactividad)
+  function resetForm() {
+    if ((mode === 'edit' || mode === 'view') && reservation) {
+      formData = {
+        client_name: reservation.client_name || '',
+        client_phone: reservation.client_phone || '',
+        client_email: reservation.client_email || '',
+        client_notes: reservation.client_notes || '',
+        party_size: reservation.party_size || 2,
+        start_time: formatDateTimeForInput(reservation.start_time),
+        end_time: formatDateTimeForInput(reservation.end_time)
+      };
+    } else {
+      let startTime = '';
+      if (preselectedTime) {
+        const dateStr = reservationStore.selectedDate.toISOString().split('T')[0];
+        startTime = `${dateStr}T${preselectedTime}`;
+      } else {
+        startTime = roundToNextSlot(getNowInTimezone());
+      }
+
+      // Calcular end_time con variable LOCAL, EVITAR leer/escribir formData en el mismo paso
+      let endTime = '';
+      if (startTime) {
+        const startDt = new Date(startTime);
+        const endDt = new Date(startDt.getTime() + 2 * 60 * 60 * 1000);
+        endTime = `${endDt.getFullYear()}-${String(endDt.getMonth() + 1).padStart(2, '0')}-${String(endDt.getDate()).padStart(2, '0')}T${String(endDt.getHours()).padStart(2, '0')}:${String(endDt.getMinutes()).padStart(2, '0')}`;
+      }
+
+      formData = {
+        client_name: '',
+        client_phone: '',
+        client_email: '',
+        client_notes: '',
+        party_size: 2,
+        start_time: startTime,
+        end_time: endTime
+      };
+    }
+    error = '';
+  }
 
   /** Convierte fecha ISO de la API (UTC) a string local para datetime-local input */
   function formatDateTimeForInput(dateTimeStr: any): string {
@@ -121,10 +157,7 @@
         result = await apiCentralized.updateReservation(reservation.id, payload as Partial<ReservationData>);
       }
       
-      // Success - notify parent component
-      isOpen = false;
-      
-      // Dispatch custom event for parent component
+      // Notify parent component to close and reload
       const event = new CustomEvent('modalSuccess', { detail: result });
       document.dispatchEvent(event);
       
@@ -144,7 +177,6 @@
     try {
       await apiCentralized.cancelReservation(reservation.id);
       
-      isOpen = false;
       showDeleteConfirm = false;
       
       const event = new CustomEvent('modalSuccess');
@@ -170,12 +202,30 @@
   }
 
   function closeModal(): void {
-    isOpen = false;
-    
-    // Dispatch custom event for parent component
+    console.log('[ReservationModal] closeModal called');
+    onClose?.();
     const event = new CustomEvent('modalClose');
     document.dispatchEvent(event);
   }
+
+  onMount(() => {
+    // Inicializar formulario AL MONTARSE (evita loops de $effect)
+    resetForm();
+
+    // Escuchadores nativos para botones de cierre
+    const handleClose = () => closeModal();
+
+    const closeBtn = document.getElementById('modal-close-btn');
+    closeBtn?.addEventListener('click', handleClose);
+
+    const cancelBtns = document.querySelectorAll('.modal-cancel-btn');
+    cancelBtns.forEach(btn => btn.addEventListener('click', handleClose));
+
+    return () => {
+      closeBtn?.removeEventListener('click', handleClose);
+      cancelBtns.forEach(btn => btn.removeEventListener('click', handleClose));
+    };
+  });
   
   function handleBackdropClick(event: MouseEvent): void {
     if (event.target === event.currentTarget) {
@@ -184,8 +234,7 @@
   }
 </script>
 
-{#if isOpen}
-  <div 
+<div 
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
     onclick={handleBackdropClick}
     role="dialog"
@@ -199,6 +248,8 @@
             {mode === 'create' ? 'Nueva Reserva' : mode === 'edit' ? 'Editar Reserva' : 'Ver Reserva'}
           </h2>
           <button 
+            id="modal-close-btn"
+            type="button"
             onclick={closeModal}
             class="text-slate-400 hover:text-slate-600 transition-colors"
             aria-label="Cerrar modal"
@@ -349,7 +400,7 @@
                 type="button"
                 onclick={closeModal}
                 disabled={isSubmitting}
-                class="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                class="modal-cancel-btn flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -372,7 +423,7 @@
                 type="button"
                 onclick={closeModal}
                 disabled={isSubmitting}
-                class="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                class="modal-cancel-btn flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -410,7 +461,7 @@
               <button
                 type="button"
                 onclick={closeModal}
-                class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                class="modal-cancel-btn px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 Cerrar
               </button>
@@ -420,4 +471,3 @@
       </div>
     </div>
   </div>
-{/if}

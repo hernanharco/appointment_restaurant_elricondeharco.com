@@ -63,8 +63,8 @@ let isConfigModalOpen = false;
       <div class="h-12"></div>
     </main>
 
-    <!-- Restaurant Configuration Modal -->
-    <RestaurantConfigModal bind:isOpen={isConfigModalOpen} client:load />
+    <!-- Restaurant Configuration Modal (abre/cierra por eventos) -->
+    <RestaurantConfigModal onClose={() => {}} client:load />
   </div>
 </Layout>
 

@@ -1,0 +1,10 @@
+---
+// src/pages/history.astro
+// Página de historial de reservas con filtros, estadísticas y exportación
+import Layout from '@/layouts/Layout.astro';
+import HistoryView from '@/components/history/HistoryView.svelte';
+---
+
+<Layout title="Historial de Reservas | Core Business">
+  <HistoryView client:load />
+</Layout>

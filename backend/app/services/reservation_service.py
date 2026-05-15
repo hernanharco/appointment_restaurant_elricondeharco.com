@@ -225,6 +225,103 @@ class ReservationService:
             "peak_hour": max(hourly_occupancy.items(), key=lambda x: x[1])[0] if hourly_occupancy else None
         }
 
+    def get_history(
+        self,
+        page: int = 1,
+        per_page: int = 50,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        status_filter: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> dict:
+        """
+        Obtiene historial paginado de reservas con filtros.
+        """
+        query = self.db.query(Reservation).options(joinedload(Reservation.client))
+
+        # Filtro por rango de fechas
+        if start_date:
+            query = query.filter(func.date(Reservation.start_time) >= start_date)
+        if end_date:
+            query = query.filter(func.date(Reservation.start_time) <= end_date)
+
+        # Filtro por estado (separado por comas: "scheduled,completed")
+        if status_filter:
+            statuses = [s.strip() for s in status_filter.split(",")]
+            query = query.filter(Reservation.status.in_(statuses))
+
+        # Filtro por búsqueda (nombre o teléfono)
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                (Reservation.client_name.ilike(pattern)) |
+                (Reservation.client_phone.ilike(pattern))
+            )
+
+        # Ordenar por fecha descendente
+        query = query.order_by(Reservation.start_time.desc())
+
+        # Paginación
+        total = query.count()
+        items = query.offset((page - 1) * per_page).limit(per_page).all()
+
+        return {
+            "items": [self._to_read_model(r) for r in items],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": max(1, (total + per_page - 1) // per_page),
+        }
+
+    def get_stats(
+        self,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> dict:
+        """
+        Obtiene estadísticas agregadas del historial de reservas.
+        """
+        query = self.db.query(Reservation)
+
+        if start_date:
+            query = query.filter(func.date(Reservation.start_time) >= start_date)
+        if end_date:
+            query = query.filter(func.date(Reservation.start_time) <= end_date)
+
+        all_reservations = query.all()
+        total = len(all_reservations)
+
+        # Reservas activas vs canceladas
+        completed = sum(1 for r in all_reservations if r.status == 'completed')
+        cancelled = sum(1 for r in all_reservations if r.status == 'cancelled')
+        scheduled = sum(1 for r in all_reservations if r.status == 'scheduled')
+        confirmed = sum(1 for r in all_reservations if r.status == 'confirmed')
+        no_show = sum(1 for r in all_reservations if r.status == 'no_show')
+
+        # Personas totales
+        total_people = sum(r.party_size for r in all_reservations) if all_reservations else 0
+        avg_party = round(total_people / total, 1) if total > 0 else 0
+
+        # Origen de reservas
+        sources = {}
+        for r in all_reservations:
+            src = r.source or 'manual'
+            sources[src] = sources.get(src, 0) + 1
+
+        return {
+            "total_reservations": total,
+            "total_people": total_people,
+            "avg_party_size": avg_party,
+            "by_status": {
+                "completed": completed,
+                "cancelled": cancelled,
+                "scheduled": scheduled,
+                "confirmed": confirmed,
+                "no_show": no_show,
+            },
+            "by_source": sources,
+        }
+
     def _to_read_model(self, reservation: Reservation) -> ReservationRead:
         """
         Convierte un modelo Reservation a ReservationRead.

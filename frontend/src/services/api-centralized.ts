@@ -249,6 +249,65 @@ class ApiCentralized {
   async getAllRestaurantConfigs(): Promise<any[]> {
     return this.request<any[]>('/restaurant-config/');
   }
+
+  // --- Horarios del Restaurante ---
+
+  async getRestaurantHours(): Promise<any> {
+    return this.request<any>('/restaurant-hours/');
+  }
+
+  async updateRestaurantHours(hoursData: { days: any[] }): Promise<any> {
+    return this.request<any>('/restaurant-hours/', {
+      method: 'PUT',
+      body: JSON.stringify(hoursData),
+    });
+  }
+
+  // --- Historial y Exportación ---
+
+  async getHistory(params: {
+    page?: number; per_page?: number;
+    start_date?: string; end_date?: string;
+    status?: string; search?: string;
+  } = {}): Promise<any> {
+    const q = new URLSearchParams();
+    if (params.page) q.set('page', String(params.page));
+    if (params.per_page) q.set('per_page', String(params.per_page));
+    if (params.start_date) q.set('start_date', params.start_date);
+    if (params.end_date) q.set('end_date', params.end_date);
+    if (params.status) q.set('status', params.status);
+    if (params.search) q.set('search', params.search);
+    return this.request<any>(`/reservations/history?${q.toString()}`);
+  }
+
+  async getStats(params: {
+    start_date?: string; end_date?: string;
+  } = {}): Promise<any> {
+    const q = new URLSearchParams();
+    if (params.start_date) q.set('start_date', params.start_date);
+    if (params.end_date) q.set('end_date', params.end_date);
+    return this.request<any>(`/reservations/stats?${q.toString()}`);
+  }
+
+  getExportCsvUrl(params: {
+    start_date?: string; end_date?: string; status?: string;
+  } = {}): string {
+    const q = new URLSearchParams();
+    if (params.start_date) q.set('start_date', params.start_date);
+    if (params.end_date) q.set('end_date', params.end_date);
+    if (params.status) q.set('status', params.status);
+    return `${this.baseURL}/reservations/export/csv?${q.toString()}`;
+  }
+
+  getExportExcelUrl(params: {
+    start_date?: string; end_date?: string; status?: string;
+  } = {}): string {
+    const q = new URLSearchParams();
+    if (params.start_date) q.set('start_date', params.start_date);
+    if (params.end_date) q.set('end_date', params.end_date);
+    if (params.status) q.set('status', params.status);
+    return `${this.baseURL}/reservations/export/excel?${q.toString()}`;
+  }
 }
 
 // Exportamos una instancia singleton

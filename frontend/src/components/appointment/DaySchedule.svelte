@@ -133,6 +133,12 @@
     return `${duration}min`;
   }
 
+  function getWhatsAppUrl(phone: string): string {
+    // Limpiar: dejar solo dígitos
+    const clean = phone.replace(/\D/g, '');
+    return clean ? `https://wa.me/${clean}` : '#';
+  }
+
   function isPastTime(time: string): boolean {
     const [hour, minute] = time.split(':').map(Number);
     const slotDate = new Date(reservationStore.selectedDate);
@@ -145,9 +151,42 @@
 
   const timeSlots = generateTimeSlots();
 
+  // Auto-scroll al slot de la hora actual
+  function scrollToCurrentTime(): void {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMin = now.getMinutes();
+
+    // Redondear al slot de 30 min más cercano hacia abajo
+    const roundedMin = Math.floor(currentMin / 30) * 30;
+    const timeStr = `${String(currentHour).padStart(2, '0')}:${String(roundedMin).padStart(2, '0')}`;
+
+    // Si la fecha seleccionada NO es hoy, no scrolleamos
+    const today = new Date();
+    if (reservationStore.selectedDate.toDateString() !== today.toDateString()) return;
+
+    requestAnimationFrame(() => {
+      const container = document.getElementById('schedule-scroll-container');
+      if (!container) return;
+
+      const slot = container.querySelector(`[data-time="${timeStr}"]`);
+      if (slot) {
+        slot.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
+  }
+
   // Load reservations when selected date changes
   $effect(() => {
     loadReservations();
+  });
+
+  // Auto-scroll al slot actual cuando se cargan las reservas
+  $effect(() => {
+    if (reservations.length >= 0) {
+      // Usamos requestAnimationFrame para esperar que el DOM se actualice
+      requestAnimationFrame(() => scrollToCurrentTime());
+    }
   });
 
   // Add event listeners for modal events
@@ -227,7 +266,7 @@
       </div>
     </div>
 
-    <div class="max-h-[700px] overflow-y-auto custom-scrollbar">
+    <div id="schedule-scroll-container" class="max-h-[700px] overflow-y-auto custom-scrollbar">
       {#each timeSlots as time (time)}
         {@const slotReservations = getReservationsForTime(time)}
         {@const count = slotReservations.length}
@@ -235,6 +274,7 @@
         {@const isExpanded = expandedSlots.has(time)}
         {@const totalPeople = slotReservations.reduce((sum, r) => sum + (r.party_size || 0), 0)}
         <div
+          data-time={time}
           class="flex border-b border-slate-50 group transition-colors {isPast
             ? 'bg-slate-50/30'
             : 'hover:bg-blue-50/30'}"
@@ -262,23 +302,37 @@
               </button>
 
             {:else if count === 1}
-              <!-- 1 reserva → tarjeta normal (como antes) -->
+              <!-- 1 reserva → tarjeta completa -->
               {@const s = slotReservations[0]}
               <button
                 class="w-full text-left p-4 rounded-xl border-2 transition-all hover:shadow-md {getStatusColor(
                   s.status,
-                )} flex items-center justify-between group/card"
+                )} flex items-start justify-between group/card"
                 onclick={() => selectReservation(s)}
               >
-                <div class="flex-1">
+                <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="font-bold text-base">{s.client_name}</span>
+                    <span class="font-bold text-base text-slate-800 truncate">{s.client_name}</span>
                     <span
-                      class="px-2 py-0.5 rounded-full bg-white/50 text-[10px] font-bold uppercase tracking-tight"
+                      class="shrink-0 px-2 py-0.5 rounded-full bg-white/50 text-[10px] font-bold uppercase tracking-tight"
                     >
                       {s.party_size} pax
                     </span>
                   </div>
+
+                  {#if s.client_phone}
+                    <a
+                      href={getWhatsAppUrl(s.client_phone)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onclick={(e) => e.stopPropagation()}
+                      class="flex items-center gap-1.5 mt-1.5 text-xs font-medium text-green-600 hover:text-green-800 hover:underline transition-colors"
+                    >
+                      <span class="material-symbols-outlined text-sm">chat</span>
+                      <span>{s.client_phone}</span>
+                    </a>
+                  {/if}
+
                   <div class="flex items-center gap-3 mt-2">
                     <div class="flex items-center gap-1 text-xs font-medium opacity-80">
                       <span class="material-symbols-outlined text-sm">schedule</span>
@@ -290,14 +344,14 @@
                     </div>
                   </div>
                   {#if s.client_notes}
-                    <div class="text-xs mt-3 opacity-70 italic line-clamp-1">
+                    <div class="text-xs mt-2.5 opacity-70 italic line-clamp-1">
                       "{s.client_notes}"
                     </div>
                   {/if}
                 </div>
 
                 <div
-                  class="flex flex-col gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity"
+                  class="shrink-0 flex flex-col gap-1.5 ml-3 opacity-0 group-hover/card:opacity-100 transition-opacity"
                 >
                   <div
                     class="p-2 hover:bg-white/50 rounded-lg transition-colors cursor-pointer"
@@ -369,9 +423,25 @@
                                 {s.party_size} pax
                               </span>
                             </div>
-                            {#if s.client_notes}
-                              <div class="text-xs text-slate-500 truncate mt-0.5">{s.client_notes}</div>
-                            {/if}
+                            <div class="flex items-center gap-3 mt-0.5">
+                              {#if s.client_phone}
+                                <a
+                                  href={getWhatsAppUrl(s.client_phone)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onclick={(e) => e.stopPropagation()}
+                                  class="text-[11px] text-green-600 hover:text-green-800 hover:underline flex items-center gap-1"
+                                >
+                                  <span class="material-symbols-outlined text-xs">chat</span>
+                                  {s.client_phone}
+                                </a>
+                              {/if}
+                              {#if s.client_notes}
+                                <span class="text-[11px] text-slate-400 truncate max-w-[120px]">
+                                  "{s.client_notes}"
+                                </span>
+                              {/if}
+                            </div>
                           </div>
                         </div>
                         <div
@@ -404,7 +474,9 @@
   </div>
 </div>
 
-<ReservationModal bind:isOpen={isModalOpen} reservation={selectedAppointment} mode={modalMode} preselectedTime={selectedTime} />
+{#if isModalOpen}
+  <ReservationModal reservation={selectedAppointment} mode={modalMode} preselectedTime={selectedTime} onClose={() => isModalOpen = false} />
+{/if}
 
 <style>
   .day-schedule {
